@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Game Performance Profiler</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #1a1a2e;
+      color: #eee;
+      min-height: 100vh;
+    }
+    .header {
+      background: #16213e;
+      padding: 20px;
+      border-bottom: 1px solid #0f3460;
+    }
+    .header h1 { font-size: 24px; color: #e94560; }
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 20px;
+      margin-bottom: 20px;
+    }
+    .stat-card {
+      background: #16213e;
+      padding: 20px;
+      border-radius: 8px;
+      text-align: center;
+    }
+    .stat-card .value {
+      font-size: 36px;
+      font-weight: bold;
+      color: #e94560;
+    }
+    .stat-card .label {
+      font-size: 14px;
+      color: #888;
+      margin-top: 5px;
+    }
+    .chart-container {
+      background: #16213e;
+      padding: 20px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+    }
+    .chart-title {
+      font-size: 18px;
+      margin-bottom: 15px;
+    }
+    #fps-chart, #memory-chart {
+      width: 100%;
+      height: 300px;
+    }
+    .status {
+      display: inline-block;
+      padding: 5px 10px;
+      border-radius: 4px;
+      font-size: 12px;
+      margin-left: 10px;
+    }
+    .status.connected { background: #4caf50; }
+    .status.disconnected { background: #f44336; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>🎮 Game Performance Profiler <span id="status" class="status disconnected">Disconnected</span></h1>
+  </div>
+  
+  <div class="container">
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="value" id="fps">0</div>
+        <div class="label">FPS</div>
+      </div>
+      <div class="stat-card">
+        <div class="value" id="frame-time">0</div>
+        <div class="label">Frame Time (ms)</div>
+      </div>
+      <div class="stat-card">
+        <div class="value" id="memory">0</div>
+        <div class="label">Memory (MB)</div>
+      </div>
+      <div class="stat-card">
+        <div class="value" id="frames">0</div>
+        <div class="label">Frames</div>
+      </div>
+    </div>
+    
+    <div class="chart-container">
+      <div class="chart-title">FPS History</div>
+      <div id="fps-chart"></div>
+    </div>
+    
+    <div class="chart-container">
+      <div class="chart-title">Memory Usage</div>
+      <div id="memory-chart"></div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+  <script>
+    // WebSocket connection
+    const ws = new WebSocket('ws://localhost:8081');
+    let fpsChart, memoryChart;
+    const fpsData = [];
+    const memoryData = [];
+    const maxDataPoints = 100;
+
+    ws.onopen = () => {
+      document.getElementById('status').textContent = 'Connected';
+      document.getElementById('status').className = 'status connected';
+    };
+
+    ws.onclose = () => {
+      document.getElementById('status').textContent = 'Disconnected';
+      document.getElementById('status').className = 'status disconnected';
+    };
+
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      if (data.type === 'frame_update') {
+        updateCharts(data.data);
+      }
+    };
+
+    function updateCharts(frameData) {
+      document.getElementById('fps').textContent = Math.round(frameData.fps || 0);
+      document.getElementById('frame-time').textContent = (frameData.frameTime || 0).toFixed(2);
+      document.getElementById('memory').textContent = Math.round((frameData.memory || 0) / 1024 / 1024);
+      document.getElementById('frames').textContent = frameData.frame || 0;
+
+      const now = new Date().toLocaleTimeString();
+      fpsData.push({ name: now, value: [now, frameData.fps || 0] });
+      memoryData.push({ name: now, value: [now, (frameData.memory || 0) / 1024 / 1024] });
+
+      if (fpsData.length > maxDataPoints) fpsData.shift();
+      if (memoryData.length > maxDataPoints) memoryData.shift();
+
+      if (fpsChart) fpsChart.setOption({
+        series: [{ data: fpsData }]
+      });
+      if (memoryChart) memoryChart.setOption({
+        series: [{ data: memoryData }]
+      });
+    }
+
+    // Initialize charts when DOM is ready
+    document.addEventListener('DOMContentLoaded', () => {
+      fpsChart = echarts.init(document.getElementById('fps-chart'));
+      memoryChart = echarts.init(document.getElementById('memory-chart'));
+
+      const commonOptions = {
+        grid: { left: 50, right: 20, top: 20, bottom: 30 },
+        xAxis: { type: 'time', splitLine: { show: false } },
+        yAxis: { type: 'value', splitLine: { lineStyle: { color: '#333' } } },
+        series: [{ type: 'line', smooth: true, showSymbol: false }]
+      };
+
+      fpsChart.setOption({
+        ...commonOptions,
+        yAxis: { ...commonOptions.yAxis, name: 'FPS', min: 0 },
+        series: [{ ...commonOptions.series, itemStyle: { color: '#e94560' } }]
+      });
+
+      memoryChart.setOption({
+        ...commonOptions,
+        yAxis: { ...commonOptions.yAxis, name: 'MB', min: 0 },
+        series: [{ ...commonOptions.series, itemStyle: { color: '#4caf50' } }]
+      });
+
+      window.addEventListener('resize', () => {
+        fpsChart.resize();
+        memoryChart.resize();
+      });
+    });
+  </script>
+</body>
+</html>

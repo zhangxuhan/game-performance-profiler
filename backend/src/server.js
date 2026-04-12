@@ -12,6 +12,7 @@ const path = require('path');
 
 const PORT = process.env.PORT || 8080;
 const WS_PORT = process.env.WS_PORT || 8081;
+const SIMULATION = process.env.SIMULATION === 'true' || true; // 默认开启模拟数据
 
 // Initialize express app
 const app = express();
@@ -187,6 +188,40 @@ server.listen(PORT, () => {
 server.listen(WS_PORT, () => {
     console.log(`[WS] WebSocket server running on ws://localhost:${WS_PORT}`);
 });
+
+// 模拟数据生成器（自动生成测试数据展示）
+if (SIMULATION) {
+    let frameCount = 0;
+    let baseFps = 60;
+    let baseMemory = 50 * 1024 * 1024;
+    
+    console.log('[Sim] 模拟模式已开启，自动生成测试数据');
+    
+    setInterval(() => {
+        frameCount++;
+        
+        // 模拟波动
+        const fpsNoise = (Math.random() - 0.5) * 10;
+        const memoryNoise = (Math.random() - 0.5) * 1024 * 1024;
+        
+        const frameData = {
+            type: 'frame',
+            data: {
+                frame: frameCount,
+                fps: Math.max(30, Math.min(144, baseFps + fpsNoise)),
+                frameTime: 1000 / (baseFps + fpsNoise),
+                memory: Math.max(10 * 1024 * 1024, baseMemory + memoryNoise),
+                profiles: [
+                    { name: 'Update', duration: Math.random() * 5000 },
+                    { name: 'Render', duration: Math.random() * 3000 },
+                    { name: 'Physics', duration: Math.random() * 2000 }
+                ]
+            }
+        };
+        
+        handleProfilerData(frameData);
+    }, 100); // 每100ms发送一帧
+}
 
 // Graceful shutdown
 process.on('SIGINT', () => {

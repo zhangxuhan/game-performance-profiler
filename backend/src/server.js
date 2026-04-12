@@ -22,8 +22,11 @@ app.use(express.json());
 // HTTP server for static files and REST API
 const server = http.createServer(app);
 
+// Separate server for WebSocket
+const wsServer = http.createServer();
+
 // WebSocket server
-const wss = new WebSocket.Server({ server });
+const wss = new WebSocket.Server({ server: wsServer });
 
 // Store connected clients
 const clients = new Set();
@@ -185,7 +188,7 @@ server.listen(PORT, () => {
     console.log(`[HTTP] Server running on http://localhost:${PORT}`);
 });
 
-server.listen(WS_PORT, () => {
+wsServer.listen(WS_PORT, () => {
     console.log(`[WS] WebSocket server running on ws://localhost:${WS_PORT}`);
 });
 

@@ -9,7 +9,7 @@ const path = require('path');
 const { startServer } = require('./src/server');
 
 let mainWindow = null;
-const isDev = !app.isPackaged;
+const isDev = process.env.NODE_ENV !== 'production';
 
 function getFrontendUrl() {
   if (isDev) {

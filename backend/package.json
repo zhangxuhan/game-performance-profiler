@@ -1,13 +1,14 @@
 {
-  "name": "game-performance-profiler-backend",
+  "name": "game-performance-profiler",
   "version": "1.0.0",
-  "description": "Game Performance Profiler Backend Server",
+  "author": "Game Performance Profiler",
+  "description": "Game Performance Profiler - Desktop Application",
   "main": "main.js",
   "scripts": {
     "start": "node src/server.js",
     "dev": "node src/server.js",
     "electron": "electron .",
-    "electron:dev": "electron electron/main.js",
+    "electron:dev": "electron .",
     "build": "electron-builder --win --x64",
     "build:dir": "electron-builder --win --x64 --dir"
   },
@@ -19,14 +20,13 @@
       "buildResources": "build"
     },
     "files": [
+      "main.js",
+      "preload.js",
       "src/**/*",
-      "../frontend/dist/**/*",
+      "frontend-dist/**/*",
       "node_modules/**/*",
       "package.json"
     ],
-    "extraMetadata": {
-      "main": "src/server.js"
-    },
     "win": {
       "target": [
         {
@@ -34,7 +34,7 @@
           "arch": ["x64"]
         }
       ],
-      "icon": "build/icon.ico"
+      "artifactName": "${productName}-${version}-Setup.${ext}"
     },
     "nsis": {
       "oneClick": false,
@@ -44,10 +44,7 @@
       "shortcutName": "Game Performance Profiler"
     },
     "asar": true,
-    "asarUnpack": [
-      "node_modules/ws/**/*",
-      "node_modules/express/**/*"
-    ]
+    "forceCodeSigning": false
   },
   "dependencies": {
     "ws": "^8.16.0",

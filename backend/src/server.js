@@ -32,6 +32,13 @@ let latestFrameData = null;
 let frameHistory = [];
 let memorySnapshots = [];
 
+// Simulation state
+let simulationRunning = true;
+let simulationTimer = null;
+let frameCount = 0;
+let baseFps = 60;
+let baseMemory = 50 * 1024 * 1024;
+
 // Handle profiler data
 function handleProfilerData(data) {
     const timestamp = Date.now();
@@ -137,26 +144,35 @@ function setupRoutes(app) {
         res.json({ 
             status: 'ok', 
             uptime: process.uptime(),
-            clients: clients.size
+            clients: clients.size,
+            simulation: simulationRunning
         });
+    });
+
+    // Simulation control
+    app.post('/api/simulation/toggle', (req, res) => {
+        const running = toggleSimulation();
+        res.json({ running });
+    });
+    app.post('/api/simulation/start', (req, res) => {
+        startSimulation();
+        res.json({ running: true });
+    });
+    app.post('/api/simulation/stop', (req, res) => {
+        stopSimulation();
+        res.json({ running: false });
     });
 }
 
 // Start simulation
 function startSimulation() {
-    let frameCount = 0;
-    let baseFps = 60;
-    let baseMemory = 50 * 1024 * 1024;
-    
-    console.log('[Sim] 模拟模式已开启，自动生成测试数据');
-    
-    setInterval(() => {
+    if (simulationTimer) return;
+    console.log('[Sim] Simulation started');
+    simulationRunning = true;
+    simulationTimer = setInterval(() => {
         frameCount++;
-        
-        // 模拟波动
         const fpsNoise = (Math.random() - 0.5) * 10;
         const memoryNoise = (Math.random() - 0.5) * 1024 * 1024;
-        
         const frameData = {
             type: 'frame',
             data: {
@@ -171,9 +187,28 @@ function startSimulation() {
                 ]
             }
         };
-        
         handleProfilerData(frameData);
-    }, 100); // 每100ms发送一帧
+    }, 100);
+}
+
+// Stop simulation
+function stopSimulation() {
+    if (simulationTimer) {
+        clearInterval(simulationTimer);
+        simulationTimer = null;
+    }
+    simulationRunning = false;
+    console.log('[Sim] Simulation stopped');
+}
+
+// Toggle simulation
+function toggleSimulation() {
+    if (simulationRunning) {
+        stopSimulation();
+    } else {
+        startSimulation();
+    }
+    return simulationRunning;
 }
 
 // Main server startup function
@@ -230,7 +265,16 @@ function startServer() {
         ws.on('message', (message) => {
             try {
                 const data = JSON.parse(message);
-                handleProfilerData(data);
+                if (data.type === 'simulation_control') {
+                    const wasRunning = simulationRunning;
+                    if (data.action === 'start') startSimulation();
+                    else if (data.action === 'stop') stopSimulation();
+                    else if (data.action === 'toggle') toggleSimulation();
+                    // Notify all clients of new simulation state
+                    broadcast({ type: 'simulation_status', running: simulationRunning });
+                } else {
+                    handleProfilerData(data);
+                }
             } catch (e) {
                 console.error('[WS] Error parsing message:', e.message);
             }

@@ -32,3 +32,12 @@ npm-debug.log*
 # Environment
 .env
 .env.local
+
+# Build artifacts
+dist/
+*.zip
+update-asar.ps1
+capture-*.ps1
+screenshot.ps1
+compress-png.ps1
+RELEASE_NOTES.md

@@ -1,4 +1,5 @@
 #include "ProfilerCore.h"
+#include "StatisticsAnalyzer.h"
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -17,6 +18,7 @@ ProfilerCore::ProfilerCore() {
     m_totalAllocated = 0;
     m_totalFreed = 0;
     m_allocationCount = 0;
+    m_analyzer = std::make_unique<StatisticsAnalyzer>();
 }
 
 ProfilerCore::~ProfilerCore() {
@@ -28,6 +30,7 @@ void ProfilerCore::StartSampling() {
     
     m_isRunning = true;
     m_frameHistory.clear();
+    m_analyzer->Reset();
     std::cout << "[Profiler] Sampling started" << std::endl;
 }
 
@@ -71,6 +74,12 @@ void ProfilerCore::EndFrame() {
     // Keep only last 1000 frames in memory
     if (m_frameHistory.size() > 1000) {
         m_frameHistory.erase(m_frameHistory.begin());
+    }
+    
+    // Feed data to statistics analyzer
+    if (m_analyzer) {
+        m_analyzer->RecordFrame(static_cast<double>(fps), static_cast<double>(frameTimeMs),
+                               frame.memory.currentUsage);
     }
     
     // Send data to server if callback is set
@@ -144,6 +153,18 @@ void ProfilerCore::SetDataCallback(DataCallback callback) {
     m_dataCallback = callback;
 }
 
+void ProfilerCore::SetAnalyzerWindowSize(size_t windowSize) {
+    if (m_analyzer) {
+        m_analyzer->SetWindowSize(windowSize);
+    }
+}
+
+void ProfilerCore::SetAnalyzerThresholds(const struct AlertThresholds& thresholds) {
+    if (m_analyzer) {
+        m_analyzer->SetThresholds(thresholds);
+    }
+}
+
 void ProfilerCore::SendDataToServer() {
     if (!m_dataCallback || m_frameHistory.empty()) return;
     
@@ -174,7 +195,14 @@ std::string ProfilerCore::ExportToJSON() const {
         if (i < m_frameHistory.size() - 1) ss << ",";
     }
     
-    ss << "]}";
+    ss << "]";
+    
+    // Append statistics if analyzer is available
+    if (m_analyzer) {
+        ss << ",\"statistics\":" << m_analyzer->ExportToJSON();
+    }
+    
+    ss << "}";
     return ss.str();
 }
 

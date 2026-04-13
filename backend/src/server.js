@@ -1,6 +1,7 @@
 /**
  * Game Performance Profiler - Backend Server
  * WebSocket server for receiving profiling data
+ * Can be used standalone or embedded in Electron
  */
 
 const WebSocket = require('ws');
@@ -12,21 +13,16 @@ const path = require('path');
 
 const PORT = process.env.PORT || 8080;
 const WS_PORT = process.env.WS_PORT || 8081;
-const SIMULATION = process.env.SIMULATION === 'true' || true; // 默认开启模拟数据
+const IS_ELECTRON = process.env.ELECTRON === 'true';
+const IS_PRODUCTION = process.env.NODE_ENV === 'production' || (!process.env.NODE_ENV);
 
-// Initialize express app
-const app = express();
-app.use(cors());
-app.use(express.json());
+// For production, serve static frontend files
+const FRONTEND_DIST = path.join(__dirname, '..', 'frontend-dist');
 
-// HTTP server for static files and REST API
-const server = http.createServer(app);
-
-// Separate server for WebSocket
-const wsServer = http.createServer();
-
-// WebSocket server
-const wss = new WebSocket.Server({ server: wsServer });
+// Store server instances
+let server = null;
+let wsServer = null;
+let wss = null;
 
 // Store connected clients
 const clients = new Set();
@@ -35,44 +31,6 @@ const clients = new Set();
 let latestFrameData = null;
 let frameHistory = [];
 let memorySnapshots = [];
-
-// WebSocket connection handler
-wss.on('connection', (ws) => {
-    console.log('[WS] Client connected');
-    clients.add(ws);
-    
-    // Send welcome message
-    ws.send(JSON.stringify({
-        type: 'welcome',
-        message: 'Connected to Game Performance Profiler'
-    }));
-    
-    // Send latest data if available
-    if (latestFrameData) {
-        ws.send(JSON.stringify({
-            type: 'frame_update',
-            data: latestFrameData
-        }));
-    }
-    
-    ws.on('message', (message) => {
-        try {
-            const data = JSON.parse(message);
-            handleProfilerData(data);
-        } catch (e) {
-            console.error('[WS] Error parsing message:', e.message);
-        }
-    });
-    
-    ws.on('close', () => {
-        console.log('[WS] Client disconnected');
-        clients.delete(ws);
-    });
-    
-    ws.on('error', (error) => {
-        console.error('[WS] Error:', error.message);
-    });
-});
 
 // Handle profiler data
 function handleProfilerData(data) {
@@ -125,75 +83,67 @@ function broadcast(message) {
 }
 
 // REST API endpoints
-
-// Get latest frame data
-app.get('/api/frames/latest', (req, res) => {
-    res.json(latestFrameData || { error: 'No data available' });
-});
-
-// Get frame history
-app.get('/api/frames/history', (req, res) => {
-    const limit = parseInt(req.query.limit) || 100;
-    res.json(frameHistory.slice(-limit));
-});
-
-// Get memory snapshots
-app.get('/api/memory', (req, res) => {
-    const limit = parseInt(req.query.limit) || 100;
-    res.json(memorySnapshots.slice(-limit));
-});
-
-// Get statistics
-app.get('/api/stats', (req, res) => {
-    if (frameHistory.length === 0) {
-        res.json({ error: 'No data available' });
-        return;
-    }
-    
-    const fpsValues = frameHistory.map(f => f.fps).filter(f => f !== undefined);
-    const memoryValues = frameHistory.map(f => f.memory?.currentUsage || 0);
-    
-    const avgFps = fpsValues.length > 0 
-        ? fpsValues.reduce((a, b) => a + b, 0) / fpsValues.length 
-        : 0;
-    
-    const minFps = fpsValues.length > 0 ? Math.min(...fpsValues) : 0;
-    const maxFps = fpsValues.length > 0 ? Math.max(...fpsValues) : 0;
-    
-    const avgMemory = memoryValues.length > 0 
-        ? memoryValues.reduce((a, b) => a + b, 0) / memoryValues.length 
-        : 0;
-    
-    res.json({
-        frameCount: frameHistory.length,
-        avgFps: Math.round(avgFps * 100) / 100,
-        minFps: Math.round(minFps * 100) / 100,
-        maxFps: Math.round(maxFps * 100) / 100,
-        avgMemory: Math.round(avgMemory / 1024 / 1024), // MB
-        connectedClients: clients.size
+function setupRoutes(app) {
+    // Get latest frame data
+    app.get('/api/frames/latest', (req, res) => {
+        res.json(latestFrameData || { error: 'No data available' });
     });
-});
 
-// Health check
-app.get('/api/health', (req, res) => {
-    res.json({ 
-        status: 'ok', 
-        uptime: process.uptime(),
-        clients: clients.size
+    // Get frame history
+    app.get('/api/frames/history', (req, res) => {
+        const limit = parseInt(req.query.limit) || 100;
+        res.json(frameHistory.slice(-limit));
     });
-});
 
-// Start servers
-server.listen(PORT, () => {
-    console.log(`[HTTP] Server running on http://localhost:${PORT}`);
-});
+    // Get memory snapshots
+    app.get('/api/memory', (req, res) => {
+        const limit = parseInt(req.query.limit) || 100;
+        res.json(memorySnapshots.slice(-limit));
+    });
 
-wsServer.listen(WS_PORT, () => {
-    console.log(`[WS] WebSocket server running on ws://localhost:${WS_PORT}`);
-});
+    // Get statistics
+    app.get('/api/stats', (req, res) => {
+        if (frameHistory.length === 0) {
+            res.json({ error: 'No data available' });
+            return;
+        }
+        
+        const fpsValues = frameHistory.map(f => f.fps).filter(f => f !== undefined);
+        const memoryValues = frameHistory.map(f => f.memory?.currentUsage || 0);
+        
+        const avgFps = fpsValues.length > 0 
+            ? fpsValues.reduce((a, b) => a + b, 0) / fpsValues.length 
+            : 0;
+        
+        const minFps = fpsValues.length > 0 ? Math.min(...fpsValues) : 0;
+        const maxFps = fpsValues.length > 0 ? Math.max(...fpsValues) : 0;
+        
+        const avgMemory = memoryValues.length > 0 
+            ? memoryValues.reduce((a, b) => a + b, 0) / memoryValues.length 
+            : 0;
+        
+        res.json({
+            frameCount: frameHistory.length,
+            avgFps: Math.round(avgFps * 100) / 100,
+            minFps: Math.round(minFps * 100) / 100,
+            maxFps: Math.round(maxFps * 100) / 100,
+            avgMemory: Math.round(avgMemory / 1024 / 1024), // MB
+            connectedClients: clients.size
+        });
+    });
 
-// 模拟数据生成器（自动生成测试数据展示）
-if (SIMULATION) {
+    // Health check
+    app.get('/api/health', (req, res) => {
+        res.json({ 
+            status: 'ok', 
+            uptime: process.uptime(),
+            clients: clients.size
+        });
+    });
+}
+
+// Start simulation
+function startSimulation() {
     let frameCount = 0;
     let baseFps = 60;
     let baseMemory = 50 * 1024 * 1024;
@@ -226,10 +176,103 @@ if (SIMULATION) {
     }, 100); // 每100ms发送一帧
 }
 
-// Graceful shutdown
-process.on('SIGINT', () => {
-    console.log('\n[Server] Shutting down...');
-    wss.close();
-    server.close();
-    process.exit(0);
-});
+// Main server startup function
+function startServer() {
+    // Initialize express app
+    const app = express();
+    app.use(cors());
+    app.use(express.json());
+
+    // Serve static files in production
+    if (IS_PRODUCTION) {
+        console.log('[Server] Production mode - serving frontend from:', FRONTEND_DIST);
+        if (fs.existsSync(FRONTEND_DIST)) {
+            app.use(express.static(FRONTEND_DIST));
+            app.get('*', (req, res) => {
+                res.sendFile(path.join(FRONTEND_DIST, 'index.html'));
+            });
+        } else {
+            console.log('[Server] Warning: frontend-dist not found at', FRONTEND_DIST);
+        }
+    }
+
+    // Setup routes
+    setupRoutes(app);
+
+    // HTTP server for static files and REST API
+    server = http.createServer(app);
+
+    // Separate server for WebSocket
+    wsServer = http.createServer();
+
+    // WebSocket server
+    wss = new WebSocket.Server({ server: wsServer });
+
+    // WebSocket connection handler
+    wss.on('connection', (ws) => {
+        console.log('[WS] Client connected');
+        clients.add(ws);
+        
+        // Send welcome message
+        ws.send(JSON.stringify({
+            type: 'welcome',
+            message: 'Connected to Game Performance Profiler'
+        }));
+        
+        // Send latest data if available
+        if (latestFrameData) {
+            ws.send(JSON.stringify({
+                type: 'frame_update',
+                data: latestFrameData
+            }));
+        }
+        
+        ws.on('message', (message) => {
+            try {
+                const data = JSON.parse(message);
+                handleProfilerData(data);
+            } catch (e) {
+                console.error('[WS] Error parsing message:', e.message);
+            }
+        });
+        
+        ws.on('close', () => {
+            console.log('[WS] Client disconnected');
+            clients.delete(ws);
+        });
+        
+        ws.on('error', (error) => {
+            console.error('[WS] Error:', error.message);
+        });
+    });
+
+    // Start servers
+    server.listen(PORT, () => {
+        console.log(`[HTTP] Server running on http://localhost:${PORT}`);
+    });
+
+    wsServer.listen(WS_PORT, () => {
+        console.log(`[WS] WebSocket server running on ws://localhost:${WS_PORT}`);
+    });
+
+    // Start simulation if enabled
+    if (IS_ELECTRON || process.env.SIMULATION === 'true') {
+        startSimulation();
+    }
+
+    // Graceful shutdown
+    process.on('SIGINT', () => {
+        console.log('\n[Server] Shutting down...');
+        if (wss) wss.close();
+        if (server) server.close();
+        process.exit(0);
+    });
+}
+
+// Export for use in Electron
+module.exports = { startServer };
+
+// If run directly (not imported), start server immediately
+if (require.main === module) {
+    startServer();
+}

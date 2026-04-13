@@ -2,14 +2,60 @@
   "name": "game-performance-profiler-backend",
   "version": "1.0.0",
   "description": "Game Performance Profiler Backend Server",
-  "main": "src/server.js",
+  "main": "main.js",
   "scripts": {
     "start": "node src/server.js",
-    "dev": "node src/server.js"
+    "dev": "node src/server.js",
+    "electron": "electron .",
+    "electron:dev": "electron electron/main.js",
+    "build": "electron-builder --win --x64",
+    "build:dir": "electron-builder --win --x64 --dir"
+  },
+  "build": {
+    "appId": "com.gameprofiler.app",
+    "productName": "Game Performance Profiler",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "../frontend/dist/**/*",
+      "node_modules/**/*",
+      "package.json"
+    ],
+    "extraMetadata": {
+      "main": "src/server.js"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Game Performance Profiler"
+    },
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/ws/**/*",
+      "node_modules/express/**/*"
+    ]
   },
   "dependencies": {
     "ws": "^8.16.0",
     "express": "^4.18.2",
     "cors": "^2.8.5"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
   }
 }

@@ -6,6 +6,11 @@
 #include <memory>
 #include <functional>
 
+// Forward declare to avoid circular dependency
+namespace ProfilerCore {
+    class StatisticsAnalyzer;
+}
+
 namespace ProfilerCore {
 
 struct ProfileData {
@@ -57,6 +62,11 @@ public:
     void TrackDeallocation(size_t size);
     MemorySnapshot GetMemorySnapshot() const;
     
+    // Statistics analysis (new)
+    StatisticsAnalyzer* GetAnalyzer() { return m_analyzer.get(); }
+    void SetAnalyzerWindowSize(size_t windowSize);
+    void SetAnalyzerThresholds(const struct AlertThresholds& thresholds);
+    
     // Data export
     std::string ExportToJSON() const;
     std::string ExportToCSV() const;
@@ -86,6 +96,8 @@ private:
     int m_allocationCount = 0;
     
     DataCallback m_dataCallback;
+    
+    std::unique_ptr<StatisticsAnalyzer> m_analyzer;
     
     struct FunctionStackEntry {
         std::string name;

@@ -33,6 +33,23 @@ Windows 游戏性能分析工具 — 开箱即用，无需配置。
 | **P95 FPS** | P95 分位帧率（尾部性能） |
 | **Stability** | 稳定性评分（0-100%） |
 
+### 性能警报系统
+
+实时检测并提示性能异常，支持以下检测类型：
+
+| 警报类型 | 说明 |
+|----------|------|
+| **FPS Drop** | 帧率突然下降 |
+| **Frame Time Spike** | 单帧耗时异常 |
+| **Memory Leak** | 内存泄漏检测（持续增长） |
+| **High Memory** | 内存使用过高 |
+| **Stability Issue** | 帧率不稳定 |
+| **Thermal Throttling** | 持续低帧率（疑似降频） |
+
+警报级别：🔴 严重 · 🟡 警告 · ℹ️ 提示
+
+支持：一键确认、全部确认、去重过滤
+
 ### FPS 状态颜色
 
 | 颜色 | 范围 | 含义 |
@@ -79,9 +96,12 @@ cd frontend && npm install && npm run dev
 game-performance-profiler/
 ├── backend/           # Node.js 后端 + Electron
 │   ├── main.js        # Electron 主进程
-│   └── src/server.js  # WebSocket + REST API
+│   └── src/server.js  # WebSocket + REST API + Alert Engine
 ├── frontend/          # Vue 3 可视化界面
 └── src/core/          # C++ 原生采样引擎（可选）
+    ├── ProfilerCore        # 帧采样与数据导出
+    ├── StatisticsAnalyzer  # 统计分析（分位数、稳定性）
+    └── AlertManager        # 实时性能警报系统
 ```
 
 ---
@@ -132,6 +152,23 @@ A Windows game performance analysis tool — ready to use, no configuration need
 | **Avg FPS** | Average FPS |
 | **P95 FPS** | 95th percentile FPS |
 | **Stability** | Stability score (0-100%) |
+
+### Performance Alert System
+
+Real-time detection and notification of performance anomalies:
+
+| Alert Type | Description |
+|------------|-------------|
+| **FPS Drop** | Sudden frame rate decrease |
+| **Frame Time Spike** | Abnormal single-frame time |
+| **Memory Leak** | Memory leak detection (sustained growth) |
+| **High Memory** | Excessive memory usage |
+| **Stability Issue** | Frame rate instability |
+| **Thermal Throttling** | Sustained low FPS (possible throttling) |
+
+Alert levels: 🔴 Critical · 🟡 Warning · ℹ️ Info
+
+Features: One-click acknowledge, acknowledge all, deduplication
 
 ### FPS Color Coding
 

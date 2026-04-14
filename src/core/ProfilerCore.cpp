@@ -1,5 +1,6 @@
 #include "ProfilerCore.h"
 #include "StatisticsAnalyzer.h"
+#include "AlertManager.h"
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -19,6 +20,12 @@ ProfilerCore::ProfilerCore() {
     m_totalFreed = 0;
     m_allocationCount = 0;
     m_analyzer = std::make_unique<StatisticsAnalyzer>();
+    m_alertManager = std::make_unique<AlertManager>();
+    
+    // Wire alert manager to analyzer output
+    m_alertManager->SetOnAlertGenerated([](const Alert& alert) {
+        std::cout << "[Profiler Alert] " << alert.message << std::endl;
+    });
 }
 
 ProfilerCore::~ProfilerCore() {
@@ -80,6 +87,18 @@ void ProfilerCore::EndFrame() {
     if (m_analyzer) {
         m_analyzer->RecordFrame(static_cast<double>(fps), static_cast<double>(frameTimeMs),
                                frame.memory.currentUsage);
+    }
+    
+    // Feed data to alert manager for real-time alerts
+    if (m_alertManager && m_analyzer) {
+        SummaryStats stats = m_analyzer->GetSummary();
+        m_alertManager->ProcessFrame(
+            static_cast<double>(fps), 
+            static_cast<double>(frameTimeMs),
+            frame.memory.currentUsage,
+            stats.avgFps,
+            stats.stabilityScore
+        );
     }
     
     // Send data to server if callback is set
@@ -202,6 +221,11 @@ std::string ProfilerCore::ExportToJSON() const {
         ss << ",\"statistics\":" << m_analyzer->ExportToJSON();
     }
     
+    // Append alerts if alert manager is available
+    if (m_alertManager) {
+        ss << ",\"alerts\":" << m_alertManager->ExportActiveToJSON();
+    }
+    
     ss << "}";
     return ss.str();
 }
@@ -221,6 +245,34 @@ std::string ProfilerCore::ExportToCSV() const {
     }
     
     return ss.str();
+}
+
+void ProfilerCore::SetAlertConfig(const struct AlertConfig& config) {
+    if (m_alertManager) {
+        m_alertManager->SetConfig(config);
+    }
+}
+
+const std::vector<Alert>& ProfilerCore::GetActiveAlerts() const {
+    static const std::vector<Alert> empty;
+    if (!m_alertManager) return empty;
+    // Note: This returns a reference to internal state; in production,
+    // you'd return a copy. For performance, we use GetAlertManager() directly.
+    return m_alertManager->GetAllAlerts();
+}
+
+bool ProfilerCore::AcknowledgeAlert(int alertId) {
+    if (m_alertManager) {
+        return m_alertManager->AcknowledgeAlert(alertId);
+    }
+    return false;
+}
+
+bool ProfilerCore::AcknowledgeAllAlerts() {
+    if (m_alertManager) {
+        return m_alertManager->AcknowledgeAllAlerts();
+    }
+    return false;
 }
 
 } // namespace ProfilerCore

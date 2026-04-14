@@ -32,6 +32,37 @@ let latestFrameData = null;
 let frameHistory = [];
 let memorySnapshots = [];
 
+// Alert system state
+let alerts = [];
+let alertIdCounter = 0;
+let alertStats = { totalAlerts: 0, infoCount: 0, warningCount: 0, criticalCount: 0, unacknowledgedCount: 0 };
+
+// Alert configuration thresholds
+const alertConfig = {
+    fpsDropThreshold: 10,
+    fpsCriticalThreshold: 30,
+    fpsWarningThreshold: 45,
+    frameTimeSpikeMultiplier: 2.0,
+    frameTimeCriticalMs: 33.33,
+    frameTimeWarningMs: 22.22,
+    memoryGrowthRateThreshold: 1.0 * 1024 * 1024,
+    memoryCriticalMB: 512,
+    memoryWarningMB: 256,
+    stabilityWarningThreshold: 70,
+    stabilityCriticalThreshold: 50,
+    deduplicationWindowMs: 5000,
+    maxAlerts: 100
+};
+
+// Track last alert times for deduplication
+const lastAlertTimes = {};
+
+// Frame history for alert analysis
+const alertFpsHistory = [];
+const alertFrameTimeHistory = [];
+const alertMemoryHistory = [];
+const ALERT_HISTORY_WINDOW = 120;
+
 // Simulation state
 let simulationRunning = true;
 let simulationTimer = null;
@@ -61,6 +92,9 @@ function handleProfilerData(data) {
             type: 'frame_update',
             data: latestFrameData
         });
+        
+        // Run alert analysis on frame data
+        analyzeFrameForAlerts(latestFrameData);
     }
     else if (data.type === 'memory') {
         memorySnapshots.push({
@@ -162,6 +196,73 @@ function setupRoutes(app) {
         stopSimulation();
         res.json({ running: false });
     });
+
+    // Alert API endpoints
+    app.get('/api/alerts', (req, res) => {
+        const severity = req.query.severity;
+        const type = req.query.type;
+        let result = [...alerts];
+        if (severity) result = result.filter(a => a.severity === severity);
+        if (type) result = result.filter(a => a.type === type);
+        res.json({ alerts: result, total: result.length });
+    });
+
+    app.get('/api/alerts/active', (req, res) => {
+        const active = getActiveAlerts();
+        res.json({ alerts: active, count: active.length });
+    });
+
+    app.get('/api/alerts/stats', (req, res) => {
+        res.json({
+            ...alertStats,
+            hasCritical: alerts.some(a => a.severity === 'critical' && !a.acknowledged),
+            hasUnacknowledged: alerts.some(a => !a.acknowledged),
+            activeCount: getActiveAlerts().length
+        });
+    });
+
+    app.post('/api/alerts/:id/acknowledge', (req, res) => {
+        const id = parseInt(req.params.id);
+        const alert = alerts.find(a => a.id === id);
+        if (!alert) {
+            res.status(404).json({ error: 'Alert not found' });
+            return;
+        }
+        alert.acknowledged = true;
+        alert.acknowledgedAt = Date.now();
+        alertStats.unacknowledgedCount = alerts.filter(a => !a.acknowledged).length;
+        
+        broadcast({ type: 'alert_acknowledged', data: alert });
+        res.json({ success: true, alert });
+    });
+
+    app.post('/api/alerts/acknowledge-all', (req, res) => {
+        let count = 0;
+        alerts.forEach(a => {
+            if (!a.acknowledged) {
+                a.acknowledged = true;
+                a.acknowledgedAt = Date.now();
+                count++;
+            }
+        });
+        alertStats.unacknowledgedCount = 0;
+        
+        broadcast({ type: 'alerts_all_acknowledged', data: { count } });
+        res.json({ success: true, acknowledgedCount: count });
+    });
+
+    app.delete('/api/alerts/:id', (req, res) => {
+        const id = parseInt(req.params.id);
+        const idx = alerts.findIndex(a => a.id === id);
+        if (idx === -1) {
+            res.status(404).json({ error: 'Alert not found' });
+            return;
+        }
+        const removed = alerts.splice(idx, 1)[0];
+        alertStats.totalAlerts = alerts.length;
+        alertStats.unacknowledgedCount = alerts.filter(a => !a.acknowledged).length;
+        res.json({ success: true, removed });
+    });
 }
 
 // Start simulation
@@ -209,6 +310,131 @@ function toggleSimulation() {
         startSimulation();
     }
     return simulationRunning;
+}
+
+// ==========================================
+// Alert Analysis System
+// ==========================================
+
+function analyzeFrameForAlerts(data) {
+    const fps = data.fps || 0;
+    const frameTime = data.frameTime || 0;
+    const memoryMB = (data.memory || 0) / 1024 / 1024;
+    
+    // Update history
+    alertFpsHistory.push(fps);
+    alertFrameTimeHistory.push(frameTime);
+    alertMemoryHistory.push(memoryMB);
+    
+    if (alertFpsHistory.length > ALERT_HISTORY_WINDOW) {
+        alertFpsHistory.shift();
+        alertFrameTimeHistory.shift();
+        alertMemoryHistory.shift();
+    }
+    
+    if (alertFpsHistory.length < 10) return;
+    
+    const avgFps = alertFpsHistory.reduce((a, b) => a + b, 0) / alertFpsHistory.length;
+    const avgFrameTime = alertFrameTimeHistory.reduce((a, b) => a + b, 0) / alertFrameTimeHistory.length;
+    
+    // Check FPS drop
+    const fpsDrop = avgFps - fps;
+    if (fpsDrop >= alertConfig.fpsDropThreshold) {
+        let severity = 'info';
+        if (fps < alertConfig.fpsCriticalThreshold) severity = 'critical';
+        else if (fps < alertConfig.fpsWarningThreshold) severity = 'warning';
+        
+        createAlert('FPS_DROP', severity, 
+            `FPS dropped by ${fpsDrop.toFixed(1)} to ${fps.toFixed(1)}`,
+            `Average FPS: ${avgFps.toFixed(1)}, Current: ${fps.toFixed(1)}`,
+            'fps', fps, avgFps);
+    }
+    
+    // Check frame time spike
+    if (avgFrameTime > 0 && frameTime > avgFrameTime * alertConfig.frameTimeSpikeMultiplier) {
+        let severity = 'warning';
+        if (frameTime > alertConfig.frameTimeCriticalMs) severity = 'critical';
+        
+        createAlert('FRAME_TIME_SPIKE', severity,
+            `Frame time spike: ${frameTime.toFixed(2)}ms (${(frameTime/avgFrameTime).toFixed(1)}x avg)`,
+            `Average frame time: ${avgFrameTime.toFixed(2)}ms`,
+            'frameTime', frameTime, avgFrameTime);
+    }
+    
+    // Check high memory usage
+    if (memoryMB > alertConfig.memoryWarningMB) {
+        let severity = 'warning';
+        if (memoryMB > alertConfig.memoryCriticalMB) severity = 'critical';
+        
+        createAlert('HIGH_MEMORY', severity,
+            `High memory usage: ${memoryMB.toFixed(1)} MB`,
+            `Memory exceeds ${severity === 'critical' ? alertConfig.memoryCriticalMB : alertConfig.memoryWarningMB} MB threshold`,
+            'memory', memoryMB, severity === 'critical' ? alertConfig.memoryCriticalMB : alertConfig.memoryWarningMB);
+    }
+    
+    // Check for memory leak (sustained growth)
+    if (alertMemoryHistory.length >= 60) {
+        const recentMemory = alertMemoryHistory.slice(-60);
+        const memGrowthRate = (recentMemory[recentMemory.length - 1] - recentMemory[0]) / recentMemory.length;
+        
+        if (memGrowthRate > alertConfig.memoryGrowthRateThreshold / 1024 / 1024) {
+            createAlert('MEMORY_LEAK', memGrowthRate > 1 ? 'critical' : 'warning',
+                `Potential memory leak: +${memGrowthRate.toFixed(3)} MB/frame growth`,
+                `Memory growing at ${memGrowthRate.toFixed(3)} MB/frame over last 60 frames`,
+                'memoryGrowthRate', memGrowthRate, alertConfig.memoryGrowthRateThreshold / 1024 / 1024);
+        }
+    }
+}
+
+function createAlert(type, severity, message, details, metric, value, threshold) {
+    const now = Date.now();
+    
+    // Deduplication: skip if same type+severity was emitted recently
+    const dedupKey = `${type}_${severity}`;
+    if (lastAlertTimes[dedupKey] && (now - lastAlertTimes[dedupKey]) < alertConfig.deduplicationWindowMs) {
+        return;
+    }
+    
+    lastAlertTimes[dedupKey] = now;
+    
+    const alert = {
+        id: ++alertIdCounter,
+        type,
+        severity,
+        message,
+        details,
+        timestamp: now,
+        metric,
+        value,
+        threshold,
+        acknowledged: false,
+        acknowledgedAt: null
+    };
+    
+    alerts.push(alert);
+    
+    // Update stats
+    alertStats.totalAlerts = alerts.length;
+    if (severity === 'info') alertStats.infoCount++;
+    else if (severity === 'warning') alertStats.warningCount++;
+    else if (severity === 'critical') alertStats.criticalCount++;
+    alertStats.unacknowledgedCount = alerts.filter(a => !a.acknowledged).length;
+    
+    // Trim alerts
+    while (alerts.length > alertConfig.maxAlerts) {
+        alerts.shift();
+    }
+    
+    // Broadcast alert to all WebSocket clients
+    broadcast({
+        type: 'alert',
+        data: alert
+    });
+}
+
+function getActiveAlerts() {
+    const cutoff = Date.now() - 30000; // Active within last 30s
+    return alerts.filter(a => !a.acknowledged && a.timestamp > cutoff);
 }
 
 // Main server startup function
@@ -272,6 +498,23 @@ function startServer() {
                     else if (data.action === 'toggle') toggleSimulation();
                     // Notify all clients of new simulation state
                     broadcast({ type: 'simulation_status', running: simulationRunning });
+                } else if (data.type === 'acknowledge_alert') {
+                    const alert = alerts.find(a => a.id === data.alertId);
+                    if (alert) {
+                        alert.acknowledged = true;
+                        alert.acknowledgedAt = Date.now();
+                        alertStats.unacknowledgedCount = alerts.filter(a => !a.acknowledged).length;
+                        broadcast({ type: 'alert_acknowledged', data: alert });
+                    }
+                } else if (data.type === 'acknowledge_all_alerts') {
+                    alerts.forEach(a => {
+                        if (!a.acknowledged) {
+                            a.acknowledged = true;
+                            a.acknowledgedAt = Date.now();
+                        }
+                    });
+                    alertStats.unacknowledgedCount = 0;
+                    broadcast({ type: 'alerts_all_acknowledged', data: {} });
                 } else {
                     handleProfilerData(data);
                 }

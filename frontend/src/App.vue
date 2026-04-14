@@ -71,6 +71,40 @@
           <div ref="memoryChartRef" class="chart-area"></div>
         </div>
       </div>
+
+      <!-- Alert Panel -->
+      <div class="alert-panel" v-if="alerts.length > 0">
+        <div class="alert-header">
+          <span class="alert-title">⚠️ Performance Alerts</span>
+          <div class="alert-header-actions">
+            <span class="alert-count-badge" :class="{ 'has-critical': hasCriticalAlerts }">
+              {{ unacknowledgedCount }} active
+            </span>
+            <button class="alert-ack-all-btn" @click="acknowledgeAllAlerts" v-if="unacknowledgedCount > 0">
+              ✓ Ack All
+            </button>
+          </div>
+        </div>
+        <div class="alert-list">
+          <div v-for="alert in visibleAlerts" :key="alert.id" 
+               class="alert-item" :class="'alert-' + alert.severity">
+            <div class="alert-item-left">
+              <span class="alert-icon">{{ alertSeverityIcon(alert.severity) }}</span>
+              <div class="alert-item-content">
+                <span class="alert-message">{{ alert.message }}</span>
+                <span class="alert-detail">{{ alert.details }}</span>
+                <span class="alert-meta">{{ alertMetricLabel(alert) }} · {{ formatAlertTime(alert.timestamp) }}</span>
+              </div>
+            </div>
+            <div class="alert-item-right">
+              <button v-if="!alert.acknowledged" class="alert-ack-btn" @click="acknowledgeAlert(alert.id)">
+                ✓
+              </button>
+              <span v-else class="alert-acked">✓</span>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Disconnected State -->
@@ -107,12 +141,71 @@ const fpsHistory = ref([])
 const memoryHistory = ref([])
 const maxDataPoints = 120
 
+// Alert system state
+const alerts = ref([])
+const maxVisibleAlerts = 10
+
 let fpsChart = null
 let memoryChart = null
 let ws = null
 let reconnectTimer = null
 
 const chartRangeLabel = computed(() => `Last ${maxDataPoints} frames`)
+
+const hasCriticalAlerts = computed(() => alerts.value.some(a => a.severity === 'critical' && !a.acknowledged))
+const unacknowledgedCount = computed(() => alerts.value.filter(a => !a.acknowledged).length)
+const visibleAlerts = computed(() => {
+  const active = alerts.value.filter(a => !a.acknowledged)
+  const acked = alerts.value.filter(a => a.acknowledged)
+  return [...active.slice(-maxVisibleAlerts), ...acked.slice(-3)]
+})
+
+function alertSeverityIcon(severity) {
+  if (severity === 'critical') return '🔴'
+  if (severity === 'warning') return '🟡'
+  return 'ℹ️'
+}
+
+function alertMetricLabel(alert) {
+  const labels = {
+    'fps': 'FPS',
+    'frameTime': 'Frame Time',
+    'memory': 'Memory',
+    'memoryGrowthRate': 'Mem Growth',
+    'stabilityScore': 'Stability',
+    'sustainedLowFps': 'Sustained Low FPS'
+  }
+  return labels[alert.metric] || alert.metric
+}
+
+function formatAlertTime(timestamp) {
+  const diff = Date.now() - timestamp
+  if (diff < 1000) return 'just now'
+  if (diff < 60000) return `${Math.floor(diff / 1000)}s ago`
+  if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`
+  return new Date(timestamp).toLocaleTimeString()
+}
+
+function acknowledgeAlert(alertId) {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: 'acknowledge_alert', alertId }))
+  }
+  const alert = alerts.value.find(a => a.id === alertId)
+  if (alert) {
+    alert.acknowledged = true
+    alert.acknowledgedAt = Date.now()
+  }
+}
+
+function acknowledgeAllAlerts() {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: 'acknowledge_all_alerts' }))
+  }
+  alerts.value.forEach(a => {
+    a.acknowledged = true
+    a.acknowledgedAt = Date.now()
+  })
+}
 
 const fpsColor = computed(() => {
   if (fps.value >= 55) return '#00e676'
@@ -275,6 +368,16 @@ function connectWebSocket() {
         updateData(msg.data)
       } else if (msg.type === 'simulation_status') {
         simulationOn.value = msg.running
+      } else if (msg.type === 'alert') {
+        handleIncomingAlert(msg.data)
+      } else if (msg.type === 'alert_acknowledged') {
+        const alert = alerts.value.find(a => a.id === msg.data.id)
+        if (alert) {
+          alert.acknowledged = true
+          alert.acknowledgedAt = msg.data.acknowledgedAt
+        }
+      } else if (msg.type === 'alerts_all_acknowledged') {
+        alerts.value.forEach(a => { a.acknowledged = true })
       }
     } catch {}
   }
@@ -328,6 +431,16 @@ function toggleSimulation() {
       type: 'simulation_control',
       action: simulationOn.value ? 'start' : 'stop'
     }))
+  }
+}
+
+function handleIncomingAlert(alert) {
+  // Avoid duplicates
+  if (alerts.value.some(a => a.id === alert.id)) return
+  alerts.value.push(alert)
+  // Keep only last 50 alerts in memory
+  if (alerts.value.length > 50) {
+    alerts.value = alerts.value.slice(-50)
   }
 }
 </script>
@@ -556,6 +669,187 @@ body {
 .chart-area {
   width: 100%;
   height: 220px;
+}
+
+/* Alert Panel */
+.alert-panel {
+  background: #13132b;
+  border: 1px solid #1e1e3f;
+  border-radius: 12px;
+  padding: 16px;
+  margin-top: 16px;
+}
+
+.alert-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.alert-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #c0c0d0;
+}
+
+.alert-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.alert-count-badge {
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: 12px;
+  background: rgba(255, 202, 40, 0.12);
+  color: #ffca28;
+  border: 1px solid rgba(255, 202, 40, 0.25);
+  font-weight: 500;
+}
+
+.alert-count-badge.has-critical {
+  background: rgba(239, 83, 80, 0.12);
+  color: #ef5350;
+  border-color: rgba(239, 83, 80, 0.3);
+  animation: pulse-critical 2s infinite;
+}
+
+@keyframes pulse-critical {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+.alert-ack-all-btn {
+  font-size: 11px;
+  padding: 4px 12px;
+  border-radius: 12px;
+  border: 1px solid #2a2a5a;
+  background: #1a1a35;
+  color: #888;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.alert-ack-all-btn:hover {
+  border-color: #4a4a7a;
+  color: #bbb;
+  background: #222245;
+}
+
+.alert-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.alert-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.alert-list::-webkit-scrollbar-thumb {
+  background: #2a2a5a;
+  border-radius: 2px;
+}
+
+.alert-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #0d0d1a;
+  border-left: 3px solid transparent;
+  transition: all 0.2s;
+}
+
+.alert-item.alert-critical {
+  border-left-color: #ef5350;
+  background: rgba(239, 83, 80, 0.05);
+}
+
+.alert-item.alert-warning {
+  border-left-color: #ffca28;
+  background: rgba(255, 202, 40, 0.04);
+}
+
+.alert-item.alert-info {
+  border-left-color: #4fc3f7;
+  background: rgba(79, 195, 247, 0.03);
+}
+
+.alert-item-left {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+
+.alert-icon {
+  font-size: 14px;
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.alert-item-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.alert-message {
+  font-size: 13px;
+  color: #d0d0e0;
+  font-weight: 500;
+}
+
+.alert-detail {
+  font-size: 11px;
+  color: #666;
+  line-height: 1.3;
+}
+
+.alert-meta {
+  font-size: 10px;
+  color: #444;
+  margin-top: 2px;
+}
+
+.alert-item-right {
+  flex-shrink: 0;
+  margin-left: 8px;
+}
+
+.alert-ack-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  border: 1px solid #2a2a5a;
+  background: #1a1a35;
+  color: #666;
+  cursor: pointer;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.alert-ack-btn:hover {
+  background: #222245;
+  color: #00e676;
+  border-color: rgba(0, 230, 118, 0.3);
+}
+
+.alert-acked {
+  color: #00e676;
+  font-size: 14px;
+  opacity: 0.6;
 }
 
 /* Disconnected State */

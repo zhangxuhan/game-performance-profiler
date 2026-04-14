@@ -9,6 +9,8 @@
 // Forward declare to avoid circular dependency
 namespace ProfilerCore {
     class StatisticsAnalyzer;
+    class AlertManager;
+    struct AlertThresholds;
 }
 
 namespace ProfilerCore {
@@ -62,10 +64,17 @@ public:
     void TrackDeallocation(size_t size);
     MemorySnapshot GetMemorySnapshot() const;
     
-    // Statistics analysis (new)
+    // Statistics analysis
     StatisticsAnalyzer* GetAnalyzer() { return m_analyzer.get(); }
     void SetAnalyzerWindowSize(size_t windowSize);
     void SetAnalyzerThresholds(const struct AlertThresholds& thresholds);
+    
+    // Alert management
+    AlertManager* GetAlertManager() { return m_alertManager.get(); }
+    void SetAlertConfig(const struct AlertConfig& config);
+    const std::vector<struct Alert>& GetActiveAlerts() const;
+    bool AcknowledgeAlert(int alertId);
+    bool AcknowledgeAllAlerts();
     
     // Data export
     std::string ExportToJSON() const;
@@ -98,6 +107,7 @@ private:
     DataCallback m_dataCallback;
     
     std::unique_ptr<StatisticsAnalyzer> m_analyzer;
+    std::unique_ptr<AlertManager> m_alertManager;
     
     struct FunctionStackEntry {
         std::string name;

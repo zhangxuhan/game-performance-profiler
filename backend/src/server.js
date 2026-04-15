@@ -70,29 +70,104 @@ let frameCount = 0;
 let baseFps = 60;
 let baseMemory = 50 * 1024 * 1024;
 
+// ==========================================
+// Function Profiler - Realistic profile simulation
+// ==========================================
+
+const PROFILE_FUNCTIONS = ['Update', 'Render', 'Physics', 'Audio', 'AI', 'Networking', 'GC'];
+
+// Track cumulative timing per function for realistic variation
+const functionTimers = {};
+PROFILE_FUNCTIONS.forEach(fn => {
+    functionTimers[fn] = {
+        base: fn === 'Update' ? 4000 : fn === 'Render' ? 3000 : fn === 'Physics' ? 1500 : 200 + Math.random() * 500,
+        variance: fn === 'Update' ? 1500 : fn === 'Render' ? 1000 : fn === 'Physics' ? 500 : 100,
+        spikeProbability: fn === 'GC' ? 0.02 : fn === 'Render' ? 0.01 : 0.005,
+        spikeMultiplier: fn === 'GC' ? 15 : fn === 'Physics' ? 8 : 5
+    };
+});
+
+// Generate realistic function profiling data
+function generateFunctionProfiles() {
+    const profiles = [];
+    let totalTime = 0;
+
+    PROFILE_FUNCTIONS.forEach(fn => {
+        const timer = functionTimers[fn];
+        let duration = timer.base + (Math.random() - 0.5) * 2 * timer.variance;
+
+        // Occasional spike
+        if (Math.random() < timer.spikeProbability) {
+            duration *= timer.spikeMultiplier;
+        }
+
+        duration = Math.max(0, duration);
+        profiles.push({ name: fn, duration: parseFloat(duration.toFixed(2)) });
+        totalTime += duration;
+    });
+
+    return { profiles, totalTime: parseFloat(totalTime.toFixed(2)) };
+}
+
+// Track function profile history for percentile calculations
+const profileHistory = [];
+const PROFILE_HISTORY_MAX = 200;
+
+/**
+ * Compute function-level statistics from recent history
+ * Returns: { functionName: { avg, min, max, p95 } }
+ */
+function computeFunctionStats() {
+    const stats = {};
+    if (profileHistory.length < 2) return stats;
+
+    PROFILE_FUNCTIONS.forEach(fn => {
+        const values = profileHistory.map(h => {
+            const entry = h.find(p => p.name === fn);
+            return entry ? entry.duration : 0;
+        });
+
+        if (values.length === 0) return;
+
+        const sorted = [...values].sort((a, b) => a - b);
+        const sum = values.reduce((a, b) => a + b, 0);
+        const avg = sum / values.length;
+        const p95Index = Math.min(Math.floor(values.length * 0.95), values.length - 1);
+
+        stats[fn] = {
+            avg: parseFloat(avg.toFixed(2)),
+            min: parseFloat(Math.min(...values).toFixed(2)),
+            max: parseFloat(Math.max(...values).toFixed(2)),
+            p95: parseFloat(sorted[p95Index].toFixed(2))
+        };
+    });
+
+    return stats;
+}
+
 // Handle profiler data
 function handleProfilerData(data) {
     const timestamp = Date.now();
-    
+
     if (data.type === 'frame' || data.type === 'frame_update') {
         latestFrameData = {
             ...data.data,
             receivedAt: timestamp
         };
-        
+
         frameHistory.push(latestFrameData);
-        
+
         // Keep only last 1000 frames
         if (frameHistory.length > 1000) {
             frameHistory = frameHistory.slice(-1000);
         }
-        
+
         // Broadcast to all clients
         broadcast({
             type: 'frame_update',
             data: latestFrameData
         });
-        
+
         // Run alert analysis on frame data
         analyzeFrameForAlerts(latestFrameData);
     }
@@ -101,11 +176,11 @@ function handleProfilerData(data) {
             ...data.data,
             receivedAt: timestamp
         });
-        
+
         if (memorySnapshots.length > 1000) {
             memorySnapshots = memorySnapshots.slice(-1000);
         }
-        
+
         broadcast({
             type: 'memory_update',
             data: data.data
@@ -148,21 +223,21 @@ function setupRoutes(app) {
             res.json({ error: 'No data available' });
             return;
         }
-        
+
         const fpsValues = frameHistory.map(f => f.fps).filter(f => f !== undefined);
         const memoryValues = frameHistory.map(f => f.memory?.currentUsage || 0);
-        
-        const avgFps = fpsValues.length > 0 
-            ? fpsValues.reduce((a, b) => a + b, 0) / fpsValues.length 
+
+        const avgFps = fpsValues.length > 0
+            ? fpsValues.reduce((a, b) => a + b, 0) / fpsValues.length
             : 0;
-        
+
         const minFps = fpsValues.length > 0 ? Math.min(...fpsValues) : 0;
         const maxFps = fpsValues.length > 0 ? Math.max(...fpsValues) : 0;
-        
-        const avgMemory = memoryValues.length > 0 
-            ? memoryValues.reduce((a, b) => a + b, 0) / memoryValues.length 
+
+        const avgMemory = memoryValues.length > 0
+            ? memoryValues.reduce((a, b) => a + b, 0) / memoryValues.length
             : 0;
-        
+
         res.json({
             frameCount: frameHistory.length,
             avgFps: Math.round(avgFps * 100) / 100,
@@ -173,10 +248,21 @@ function setupRoutes(app) {
         });
     });
 
+    // Get function profiler stats
+    app.get('/api/profiler/functions', (req, res) => {
+        const stats = computeFunctionStats();
+        const historyLimit = parseInt(req.query.history) || 60;
+        res.json({
+            stats,
+            functions: PROFILE_FUNCTIONS,
+            history: profileHistory.slice(-historyLimit)
+        });
+    });
+
     // Health check
     app.get('/api/health', (req, res) => {
-        res.json({ 
-            status: 'ok', 
+        res.json({
+            status: 'ok',
             uptime: process.uptime(),
             clients: clients.size,
             simulation: simulationRunning
@@ -231,7 +317,7 @@ function setupRoutes(app) {
         alert.acknowledged = true;
         alert.acknowledgedAt = Date.now();
         alertStats.unacknowledgedCount = alerts.filter(a => !a.acknowledged).length;
-        
+
         broadcast({ type: 'alert_acknowledged', data: alert });
         res.json({ success: true, alert });
     });
@@ -246,7 +332,7 @@ function setupRoutes(app) {
             }
         });
         alertStats.unacknowledgedCount = 0;
-        
+
         broadcast({ type: 'alerts_all_acknowledged', data: { count } });
         res.json({ success: true, acknowledgedCount: count });
     });
@@ -274,6 +360,10 @@ function startSimulation() {
         frameCount++;
         const fpsNoise = (Math.random() - 0.5) * 10;
         const memoryNoise = (Math.random() - 0.5) * 1024 * 1024;
+
+        // Generate realistic function profiling data
+        const { profiles, totalTime } = generateFunctionProfiles();
+
         const frameData = {
             type: 'frame',
             data: {
@@ -281,14 +371,24 @@ function startSimulation() {
                 fps: Math.max(30, Math.min(144, baseFps + fpsNoise)),
                 frameTime: 1000 / (baseFps + fpsNoise),
                 memory: Math.max(10 * 1024 * 1024, baseMemory + memoryNoise),
-                profiles: [
-                    { name: 'Update', duration: Math.random() * 5000 },
-                    { name: 'Render', duration: Math.random() * 3000 },
-                    { name: 'Physics', duration: Math.random() * 2000 }
-                ]
+                profiles,
+                profileTotalTime: totalTime
             }
         };
         handleProfilerData(frameData);
+
+        // Track profile history for statistics
+        profileHistory.push(profiles);
+        if (profileHistory.length > PROFILE_HISTORY_MAX) {
+            profileHistory.shift();
+        }
+
+        // Occasionally trigger a spike scenario (for demo)
+        if (frameCount % 300 === 0) {
+            // Every 30 seconds, simulate a render spike
+            functionTimers['Render'].base *= 3;
+            setTimeout(() => { functionTimers['Render'].base /= 3; }, 2000);
+        }
     }, 100);
 }
 
@@ -320,63 +420,63 @@ function analyzeFrameForAlerts(data) {
     const fps = data.fps || 0;
     const frameTime = data.frameTime || 0;
     const memoryMB = (data.memory || 0) / 1024 / 1024;
-    
+
     // Update history
     alertFpsHistory.push(fps);
     alertFrameTimeHistory.push(frameTime);
     alertMemoryHistory.push(memoryMB);
-    
+
     if (alertFpsHistory.length > ALERT_HISTORY_WINDOW) {
         alertFpsHistory.shift();
         alertFrameTimeHistory.shift();
         alertMemoryHistory.shift();
     }
-    
+
     if (alertFpsHistory.length < 10) return;
-    
+
     const avgFps = alertFpsHistory.reduce((a, b) => a + b, 0) / alertFpsHistory.length;
     const avgFrameTime = alertFrameTimeHistory.reduce((a, b) => a + b, 0) / alertFrameTimeHistory.length;
-    
+
     // Check FPS drop
     const fpsDrop = avgFps - fps;
     if (fpsDrop >= alertConfig.fpsDropThreshold) {
         let severity = 'info';
         if (fps < alertConfig.fpsCriticalThreshold) severity = 'critical';
         else if (fps < alertConfig.fpsWarningThreshold) severity = 'warning';
-        
-        createAlert('FPS_DROP', severity, 
+
+        createAlert('FPS_DROP', severity,
             `FPS dropped by ${fpsDrop.toFixed(1)} to ${fps.toFixed(1)}`,
             `Average FPS: ${avgFps.toFixed(1)}, Current: ${fps.toFixed(1)}`,
             'fps', fps, avgFps);
     }
-    
+
     // Check frame time spike
     if (avgFrameTime > 0 && frameTime > avgFrameTime * alertConfig.frameTimeSpikeMultiplier) {
         let severity = 'warning';
         if (frameTime > alertConfig.frameTimeCriticalMs) severity = 'critical';
-        
+
         createAlert('FRAME_TIME_SPIKE', severity,
             `Frame time spike: ${frameTime.toFixed(2)}ms (${(frameTime/avgFrameTime).toFixed(1)}x avg)`,
             `Average frame time: ${avgFrameTime.toFixed(2)}ms`,
             'frameTime', frameTime, avgFrameTime);
     }
-    
+
     // Check high memory usage
     if (memoryMB > alertConfig.memoryWarningMB) {
         let severity = 'warning';
         if (memoryMB > alertConfig.memoryCriticalMB) severity = 'critical';
-        
+
         createAlert('HIGH_MEMORY', severity,
             `High memory usage: ${memoryMB.toFixed(1)} MB`,
             `Memory exceeds ${severity === 'critical' ? alertConfig.memoryCriticalMB : alertConfig.memoryWarningMB} MB threshold`,
             'memory', memoryMB, severity === 'critical' ? alertConfig.memoryCriticalMB : alertConfig.memoryWarningMB);
     }
-    
+
     // Check for memory leak (sustained growth)
     if (alertMemoryHistory.length >= 60) {
         const recentMemory = alertMemoryHistory.slice(-60);
         const memGrowthRate = (recentMemory[recentMemory.length - 1] - recentMemory[0]) / recentMemory.length;
-        
+
         if (memGrowthRate > alertConfig.memoryGrowthRateThreshold / 1024 / 1024) {
             createAlert('MEMORY_LEAK', memGrowthRate > 1 ? 'critical' : 'warning',
                 `Potential memory leak: +${memGrowthRate.toFixed(3)} MB/frame growth`,
@@ -384,19 +484,39 @@ function analyzeFrameForAlerts(data) {
                 'memoryGrowthRate', memGrowthRate, alertConfig.memoryGrowthRateThreshold / 1024 / 1024);
         }
     }
+
+    // Check function profiler alerts (expensive functions)
+    if (data.profiles) {
+        data.profiles.forEach(p => {
+            // Detect abnormally high function time
+            const fnStats = computeFunctionStats();
+            if (fnStats[p.name]) {
+                const { avg, p95 } = fnStats[p.name];
+                if (p.duration > p95 * 3 && p95 > 0) {
+                    createAlert(
+                        'FUNCTION_SPIKE',
+                        p.duration > p95 * 10 ? 'critical' : 'warning',
+                        `Function "${p.name}" spike: ${p.duration.toFixed(0)}µs`,
+                        `Avg: ${avg.toFixed(0)}µs, P95: ${p95.toFixed(0)}µs, Current: ${p.duration.toFixed(0)}µs`,
+                        p.name, p.duration, p95 * 3
+                    );
+                }
+            }
+        });
+    }
 }
 
 function createAlert(type, severity, message, details, metric, value, threshold) {
     const now = Date.now();
-    
+
     // Deduplication: skip if same type+severity was emitted recently
     const dedupKey = `${type}_${severity}`;
     if (lastAlertTimes[dedupKey] && (now - lastAlertTimes[dedupKey]) < alertConfig.deduplicationWindowMs) {
         return;
     }
-    
+
     lastAlertTimes[dedupKey] = now;
-    
+
     const alert = {
         id: ++alertIdCounter,
         type,
@@ -410,21 +530,21 @@ function createAlert(type, severity, message, details, metric, value, threshold)
         acknowledged: false,
         acknowledgedAt: null
     };
-    
+
     alerts.push(alert);
-    
+
     // Update stats
     alertStats.totalAlerts = alerts.length;
     if (severity === 'info') alertStats.infoCount++;
     else if (severity === 'warning') alertStats.warningCount++;
     else if (severity === 'critical') alertStats.criticalCount++;
     alertStats.unacknowledgedCount = alerts.filter(a => !a.acknowledged).length;
-    
+
     // Trim alerts
     while (alerts.length > alertConfig.maxAlerts) {
         alerts.shift();
     }
-    
+
     // Broadcast alert to all WebSocket clients
     broadcast({
         type: 'alert',
@@ -473,13 +593,13 @@ function startServer() {
     wss.on('connection', (ws) => {
         console.log('[WS] Client connected');
         clients.add(ws);
-        
+
         // Send welcome message
         ws.send(JSON.stringify({
             type: 'welcome',
             message: 'Connected to Game Performance Profiler'
         }));
-        
+
         // Send latest data if available
         if (latestFrameData) {
             ws.send(JSON.stringify({
@@ -487,7 +607,7 @@ function startServer() {
                 data: latestFrameData
             }));
         }
-        
+
         ws.on('message', (message) => {
             try {
                 const data = JSON.parse(message);
@@ -522,12 +642,12 @@ function startServer() {
                 console.error('[WS] Error parsing message:', e.message);
             }
         });
-        
+
         ws.on('close', () => {
             console.log('[WS] Client disconnected');
             clients.delete(ws);
         });
-        
+
         ws.on('error', (error) => {
             console.error('[WS] Error:', error.message);
         });

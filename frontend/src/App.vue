@@ -72,6 +72,92 @@
         </div>
       </div>
 
+      <!-- Function Profiler Section -->
+      <div class="func-profiler-section">
+        <div class="section-header">
+          <span class="section-title">⚡ Function Profiler</span>
+          <span class="section-sub">Per-frame time breakdown (microseconds)</span>
+        </div>
+
+        <!-- Function Profile Chart -->
+        <div class="chart-card func-chart-card">
+          <div class="chart-header">
+            <span class="chart-title">Stacked Time — Last {{ maxFuncDataPoints }} Frames</span>
+            <div class="chart-legend">
+              <span v-for="fn in activeFunctions" :key="fn.name"
+                    class="legend-item" :style="{ color: fn.color }">
+                <span class="legend-dot" :style="{ background: fn.color }"></span>
+                {{ fn.name }}
+              </span>
+            </div>
+          </div>
+          <div ref="funcChartRef" class="chart-area func-chart-area"></div>
+        </div>
+
+        <!-- Function Stats Table -->
+        <div class="func-stats-panel">
+          <div class="func-stats-header">
+            <span class="func-stats-title">Function Statistics (Recent History)</span>
+            <span class="func-stats-sub">Avg · Min · Max · P95 per function (µs)</span>
+          </div>
+          <div class="func-stats-grid">
+            <div v-for="fn in functionStats" :key="fn.name"
+                 class="func-stat-card"
+                 :style="{ borderTopColor: fn.color }">
+              <div class="func-stat-name" :style="{ color: fn.color }">{{ fn.name }}</div>
+              <div class="func-stat-values">
+                <div class="func-stat-row">
+                  <span class="func-stat-label">Avg</span>
+                  <span class="func-stat-value">{{ formatMicros(fn.avg) }}</span>
+                </div>
+                <div class="func-stat-row">
+                  <span class="func-stat-label">Min</span>
+                  <span class="func-stat-value">{{ formatMicros(fn.min) }}</span>
+                </div>
+                <div class="func-stat-row">
+                  <span class="func-stat-label">Max</span>
+                  <span class="func-stat-value func-stat-max">{{ formatMicros(fn.max) }}</span>
+                </div>
+                <div class="func-stat-row">
+                  <span class="func-stat-label">P95</span>
+                  <span class="func-stat-value func-stat-p95">{{ formatMicros(fn.p95) }}</span>
+                </div>
+              </div>
+              <!-- Mini bar showing relative max vs avg -->
+              <div class="func-mini-bar-wrap">
+                <div class="func-mini-bar-avg"
+                     :style="{ width: barWidth(fn.avg, maxFuncAvg) + '%', background: fn.color + '66' }">
+                </div>
+                <div class="func-mini-bar-max"
+                     :style="{ width: barWidth(fn.max, maxFuncMax) + '%', background: fn.color }">
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Total Frame Time Stats -->
+        <div class="frame-total-row">
+          <div class="frame-total-card">
+            <span class="frame-total-label">Avg Frame Total</span>
+            <span class="frame-total-value">{{ formatMicros(avgFrameTotal) }} µs</span>
+          </div>
+          <div class="frame-total-card">
+            <span class="frame-total-label">Max Frame Total</span>
+            <span class="frame-total-value frame-total-max">{{ formatMicros(maxFrameTotal) }} µs</span>
+          </div>
+          <div class="frame-total-card">
+            <span class="frame-total-label">P95 Frame Total</span>
+            <span class="frame-total-value">{{ formatMicros(p95FrameTotal) }} µs</span>
+          </div>
+          <div class="frame-total-card">
+            <span class="frame-total-label">Hottest Function</span>
+            <span class="frame-total-value frame-total-hot"
+                  :style="{ color: hottestFuncColor }">{{ hottestFuncName }}</span>
+          </div>
+        </div>
+      </div>
+
       <!-- Alert Panel -->
       <div class="alert-panel" v-if="alerts.length > 0">
         <div class="alert-header">
@@ -86,7 +172,7 @@
           </div>
         </div>
         <div class="alert-list">
-          <div v-for="alert in visibleAlerts" :key="alert.id" 
+          <div v-for="alert in visibleAlerts" :key="alert.id"
                class="alert-item" :class="'alert-' + alert.severity">
             <div class="alert-item-left">
               <span class="alert-icon">{{ alertSeverityIcon(alert.severity) }}</span>
@@ -128,6 +214,7 @@ import * as echarts from 'echarts'
 
 const fpsChartRef = ref(null)
 const memoryChartRef = ref(null)
+const funcChartRef = ref(null)
 const connected = ref(false)
 const simulationOn = ref(true)
 const fps = ref(0)
@@ -141,12 +228,27 @@ const fpsHistory = ref([])
 const memoryHistory = ref([])
 const maxDataPoints = 120
 
+// Function profiler state
+const maxFuncDataPoints = 80
+const funcHistory = ref([])  // Array of { profiles: [{name, duration}] }
+const funcStatsData = ref({})  // { name: { avg, min, max, p95 } }
+const activeFunctions = ref([
+  { name: 'Update',    color: '#e94560' },
+  { name: 'Render',   color: '#4fc3f7' },
+  { name: 'Physics',  color: '#69f0ae' },
+  { name: 'Audio',    color: '#ffca28' },
+  { name: 'AI',        color: '#ce93d8' },
+  { name: 'Networking',color: '#ff8a65' },
+  { name: 'GC',        color: '#ef5350' },
+])
+
 // Alert system state
 const alerts = ref([])
 const maxVisibleAlerts = 10
 
 let fpsChart = null
 let memoryChart = null
+let funcChart = null
 let ws = null
 let reconnectTimer = null
 
@@ -159,6 +261,76 @@ const visibleAlerts = computed(() => {
   const acked = alerts.value.filter(a => a.acknowledged)
   return [...active.slice(-maxVisibleAlerts), ...acked.slice(-3)]
 })
+
+// Function profiler computed values
+const functionStats = computed(() => {
+  const stats = []
+  const data = funcStatsData.value
+  activeFunctions.value.forEach(fn => {
+    const s = data[fn.name]
+    if (s) {
+      stats.push({ name: fn.name, color: fn.color, avg: s.avg, min: s.min, max: s.max, p95: s.p95 })
+    }
+  })
+  return stats
+})
+
+const maxFuncAvg = computed(() => {
+  const vals = functionStats.value.map(s => s.avg).filter(v => v > 0)
+  return vals.length ? Math.max(...vals) : 1
+})
+
+const maxFuncMax = computed(() => {
+  const vals = functionStats.value.map(s => s.max).filter(v => v > 0)
+  return vals.length ? Math.max(...vals) : 1
+})
+
+const avgFrameTotal = computed(() => {
+  if (!funcHistory.value.length) return 0
+  return funcHistory.value.reduce((sum, f) => {
+    if (!f.profiles) return sum
+    return sum + f.profiles.reduce((s, p) => s + (p.duration || 0), 0)
+  }, 0) / funcHistory.value.length
+})
+
+const maxFrameTotal = computed(() => {
+  if (!funcHistory.value.length) return 0
+  return Math.max(...funcHistory.value.map(f => {
+    if (!f.profiles) return 0
+    return f.profiles.reduce((s, p) => s + (p.duration || 0), 0)
+  }))
+})
+
+const p95FrameTotal = computed(() => {
+  if (funcHistory.value.length < 2) return 0
+  const totals = funcHistory.value.map(f => {
+    if (!f.profiles) return 0
+    return f.profiles.reduce((s, p) => s + (p.duration || 0), 0)
+  }).sort((a, b) => a - b)
+  const idx = Math.min(Math.floor(totals.length * 0.95), totals.length - 1)
+  return totals[idx] || 0
+})
+
+const hottestFuncName = computed(() => {
+  if (!functionStats.value.length) return '—'
+  const hottest = functionStats.value.reduce((best, fn) => fn.avg > best.avg ? fn : best, { avg: 0, name: '—' })
+  return hottest.name
+})
+
+const hottestFuncColor = computed(() => {
+  const fn = functionStats.value.find(f => f.name === hottestFuncName.value)
+  return fn ? fn.color : '#888'
+})
+
+function formatMicros(us) {
+  if (us === undefined || us === null || isNaN(us)) return '—'
+  if (us >= 1000) return (us / 1000).toFixed(2) + ' ms'
+  return us.toFixed(1) + ' µs'
+}
+
+function barWidth(value, max) {
+  return max > 0 ? Math.min(100, (value / max) * 100) : 0
+}
 
 function alertSeverityIcon(severity) {
   if (severity === 'critical') return '🔴'
@@ -326,9 +498,124 @@ function buildMemoryOption(data) {
   }
 }
 
+function buildFuncChartOption(history) {
+  if (!history.length) {
+    return {
+      backgroundColor: 'transparent',
+      grid: { top: 8, right: 16, bottom: 24, left: 48 },
+      xAxis: {
+        type: 'category',
+        boundaryGap: false,
+        axisLine: { lineStyle: { color: '#2a2a4a' } },
+        axisTick: { show: false },
+        axisLabel: { color: '#666', fontSize: 10 },
+        data: []
+      },
+      yAxis: {
+        type: 'value',
+        min: 0,
+        splitLine: { lineStyle: { color: '#1e1e3a', type: 'dashed' } },
+        axisLine: { show: false },
+        axisTick: { show: false },
+        axisLabel: {
+          color: '#888',
+          fontSize: 10,
+          formatter: (v) => v >= 1000 ? (v / 1000).toFixed(1) + 'k' : v
+        },
+        name: 'Time (µs)',
+        nameTextStyle: { color: '#555', fontSize: 10 }
+      },
+      series: [],
+      animation: false
+    }
+  }
+
+  const fnOrder = ['Update', 'Render', 'Physics', 'Audio', 'AI', 'Networking', 'GC']
+  const colors = {
+    Update: '#e94560', Render: '#4fc3f7', Physics: '#69f0ae',
+    Audio: '#ffca28', AI: '#ce93d8', Networking: '#ff8a65', GC: '#ef5350'
+  }
+
+  const xData = history.map((_, i) => i)
+
+  // Build stacked series (reverse order so first function is on top)
+  const series = fnOrder.map(fnName => ({
+    name: fnName,
+    type: 'line',
+    stack: 'func',
+    data: history.map(f => {
+      const entry = f.profiles ? f.profiles.find(p => p.name === fnName) : null
+      return entry ? entry.duration : 0
+    }),
+    smooth: 0.4,
+    symbol: 'none',
+    lineStyle: { width: 0 },
+    areaStyle: {
+      color: colors[fnName] || '#888',
+      opacity: 0.7
+    },
+    emphasis: { disabled: true },
+    animation: false
+  }))
+
+  return {
+    backgroundColor: 'transparent',
+    grid: { top: 8, right: 16, bottom: 24, left: 52 },
+    xAxis: {
+      type: 'category',
+      boundaryGap: false,
+      axisLine: { lineStyle: { color: '#2a2a4a' } },
+      axisTick: { show: false },
+      axisLabel: { color: '#666', fontSize: 10 },
+      data: xData
+    },
+    yAxis: {
+      type: 'value',
+      min: 0,
+      splitLine: { lineStyle: { color: '#1e1e3a', type: 'dashed' } },
+      axisLine: { show: false },
+      axisTick: { show: false },
+      axisLabel: {
+        color: '#888',
+        fontSize: 10,
+        formatter: (v) => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v
+      },
+      name: 'µs',
+      nameTextStyle: { color: '#555', fontSize: 10 }
+    },
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'line', lineStyle: { color: '#2a2a5a', type: 'dashed' } },
+      backgroundColor: 'rgba(13,13,26,0.95)',
+      borderColor: '#2a2a4a',
+      textStyle: { color: '#c0c0d0', fontSize: 12 },
+      formatter: (params) => {
+        const total = params.reduce((s, p) => s + (p.value || 0), 0)
+        const lines = params
+          .filter(p => p.value > 0)
+          .sort((a, b) => b.value - a.value)
+          .map(p => {
+            const pct = total > 0 ? ((p.value / total) * 100).toFixed(1) : 0
+            const color = colors[p.seriesName] || '#888'
+            const val = p.value >= 1000 ? (p.value / 1000).toFixed(2) + ' ms' : p.value.toFixed(1) + ' µs'
+            return `<span style="color:${color}">■</span> ${p.seriesName}: <b>${val}</b> <span style="color:#555">(${pct}%)</span>`
+          })
+        const totalStr = total >= 1000 ? (total / 1000).toFixed(2) + ' ms' : total.toFixed(1) + ' µs'
+        return `<div style="font-size:11px;line-height:1.8"><b>Frame ${params[0].axisValue}</b><br/>` +
+               lines.join('<br/>') +
+               `<br/><span style="color:#888">Total: ${totalStr}</span></div>`
+      }
+    },
+    legend: { show: false },
+    series,
+    animation: false
+  }
+}
+
 onMounted(() => {
   fpsChart = echarts.init(fpsChartRef.value)
   memoryChart = echarts.init(memoryChartRef.value)
+  funcChart = echarts.init(funcChartRef.value)
   window.addEventListener('resize', handleResize)
   connectWebSocket()
 })
@@ -339,11 +626,13 @@ onUnmounted(() => {
   if (ws) ws.close()
   if (fpsChart) fpsChart.dispose()
   if (memoryChart) memoryChart.dispose()
+  if (funcChart) funcChart.dispose()
 })
 
 function handleResize() {
   if (fpsChart) fpsChart.resize()
   if (memoryChart) memoryChart.resize()
+  if (funcChart) funcChart.resize()
 }
 
 function connectWebSocket() {
@@ -410,6 +699,16 @@ function updateData(data) {
     stabilityScore.value = Math.max(0, Math.round((1 - Math.min(cv, 1)) * 100))
   }
 
+  // Update function profiler data
+  if (data.profiles && data.profiles.length > 0) {
+    funcHistory.value.push({ profiles: data.profiles })
+    if (funcHistory.value.length > maxFuncDataPoints) {
+      funcHistory.value.shift()
+    }
+    // Compute rolling stats for each function
+    recomputeFuncStats()
+  }
+
   if (fpsChart) {
     fpsChart.setOption({
       xAxis: { data: fpsHistory.value.map((_, i) => i) },
@@ -422,6 +721,40 @@ function updateData(data) {
       series: [{ data: memoryHistory.value }]
     })
   }
+  if (funcChart && funcHistory.value.length > 0) {
+    funcChart.setOption(buildFuncChartOption(funcHistory.value))
+  }
+}
+
+function recomputeFuncStats() {
+  const history = funcHistory.value
+  if (history.length < 2) return
+
+  const fnNames = activeFunctions.value.map(f => f.name)
+  const result = {}
+
+  fnNames.forEach(fn => {
+    const values = history
+      .map(f => f.profiles ? f.profiles.find(p => p.name === fn) : null)
+      .filter(Boolean)
+      .map(p => p.duration || 0)
+
+    if (values.length === 0) return
+
+    const sorted = [...values].sort((a, b) => a - b)
+    const sum = values.reduce((a, b) => a + b, 0)
+    const avg = sum / values.length
+    const p95idx = Math.min(Math.floor(values.length * 0.95), values.length - 1)
+
+    result[fn] = {
+      avg: parseFloat(avg.toFixed(2)),
+      min: parseFloat(Math.min(...values).toFixed(2)),
+      max: parseFloat(Math.max(...values).toFixed(2)),
+      p95: parseFloat(sorted[p95idx].toFixed(2))
+    }
+  })
+
+  funcStatsData.value = result
 }
 
 function toggleSimulation() {
@@ -671,6 +1004,199 @@ body {
   height: 220px;
 }
 
+/* Function Profiler Section */
+.func-profiler-section {
+  margin-top: 16px;
+}
+
+.section-header {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.section-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #d0d0e0;
+}
+
+.section-sub {
+  font-size: 12px;
+  color: #555;
+}
+
+.func-chart-card {
+  margin-bottom: 12px;
+}
+
+.func-chart-area {
+  width: 100%;
+  height: 260px;
+}
+
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  justify-content: flex-end;
+  max-width: 60%;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* Function Stats Panel */
+.func-stats-panel {
+  background: #13132b;
+  border: 1px solid #1e1e3f;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 12px;
+}
+
+.func-stats-header {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.func-stats-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #c0c0d0;
+}
+
+.func-stats-sub {
+  font-size: 11px;
+  color: #444;
+}
+
+.func-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 10px;
+}
+
+.func-stat-card {
+  background: #0d0d1a;
+  border: 1px solid #1e1e3f;
+  border-radius: 8px;
+  padding: 12px;
+  border-top: 2px solid;
+  transition: border-color 0.2s;
+}
+
+.func-stat-card:hover {
+  background: #0f0f22;
+}
+
+.func-stat-name {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.func-stat-values {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.func-stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.func-stat-label {
+  font-size: 10px;
+  color: #555;
+  font-weight: 500;
+}
+
+.func-stat-value {
+  font-size: 12px;
+  color: #b0b0c0;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.func-stat-max { color: #ff8a65; }
+.func-stat-p95 { color: #ffca28; }
+
+.func-mini-bar-wrap {
+  margin-top: 8px;
+  height: 4px;
+  background: #1e1e3a;
+  border-radius: 2px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.func-mini-bar-avg {
+  height: 2px;
+  border-radius: 1px;
+  transition: width 0.5s ease;
+}
+
+.func-mini-bar-max {
+  height: 2px;
+  border-radius: 1px;
+  opacity: 0.8;
+  transition: width 0.5s ease;
+}
+
+/* Frame Total Row */
+.frame-total-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+
+.frame-total-card {
+  background: #13132b;
+  border: 1px solid #1e1e3f;
+  border-radius: 10px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.frame-total-label {
+  font-size: 11px;
+  color: #555;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.frame-total-value {
+  font-size: 18px;
+  font-weight: 700;
+  color: #d0d0e0;
+  font-variant-numeric: tabular-nums;
+}
+
+.frame-total-max { color: #ff8a65; }
+.frame-total-hot { color: #e94560; }
+
 /* Alert Panel */
 .alert-panel {
   background: #13132b;
@@ -890,11 +1416,16 @@ body {
   .stats-row { grid-template-columns: repeat(3, 1fr); }
   .charts-row { grid-template-columns: 1fr; }
   .fps-number { font-size: 64px; }
+  .func-stats-grid { grid-template-columns: repeat(2, 1fr); }
+  .frame-total-row { grid-template-columns: repeat(2, 1fr); }
+  .chart-legend { max-width: 100%; }
 }
 
 @media (max-width: 600px) {
   .stats-row { grid-template-columns: repeat(2, 1fr); }
   .header { padding: 0 16px; }
   .dashboard { padding: 16px; }
+  .func-stats-grid { grid-template-columns: 1fr 1fr; }
+  .frame-total-row { grid-template-columns: repeat(2, 1fr); }
 }
 </style>

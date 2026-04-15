@@ -2,6 +2,11 @@
  * Game Performance Profiler - Backend Server
  * WebSocket server for receiving profiling data
  * Can be used standalone or embedded in Electron
+ * 
+ * Supports three data modes:
+ *   1. Simulation  — built-in fake data (default)
+ *   2. Named Pipe  — game connects to our pipe and streams data
+ *   3. Process Mon — attach to a running process and sample it
  */
 
 const WebSocket = require('ws');
@@ -71,6 +76,26 @@ let baseFps = 60;
 let baseMemory = 50 * 1024 * 1024;
 
 // ==========================================
+// Profiler Attacher Integration
+// ==========================================
+const profilerAttacher = require('./profiler-attacher');
+const { listGameProcesses } = require('./process-monitor');
+const { spawn } = require('child_process');
+
+// Wire attacher frames into the existing data pipeline
+profilerAttacher.setFrameCallback((frameData) => {
+    handleProfilerData({ type: 'frame', data: frameData });
+});
+
+// When attached process exits, notify clients
+profilerAttacher.on('processExited', ({ pid }) => {
+    broadcast({
+        type: 'attach_process_exited',
+        data: { pid }
+    });
+});
+
+// ==========================================
 // Function Profiler - Realistic profile simulation
 // ==========================================
 
@@ -115,7 +140,6 @@ const PROFILE_HISTORY_MAX = 200;
 
 /**
  * Compute function-level statistics from recent history
- * Returns: { functionName: { avg, min, max, p95 } }
  */
 function computeFunctionStats() {
     const stats = {};
@@ -170,6 +194,14 @@ function handleProfilerData(data) {
 
         // Run alert analysis on frame data
         analyzeFrameForAlerts(latestFrameData);
+
+        // Track profile history for function stats
+        if (data.data.profiles && data.data.profiles.length > 0) {
+            profileHistory.push(data.data.profiles);
+            if (profileHistory.length > PROFILE_HISTORY_MAX) {
+                profileHistory.shift();
+            }
+        }
     }
     else if (data.type === 'memory') {
         memorySnapshots.push({
@@ -225,7 +257,7 @@ function setupRoutes(app) {
         }
 
         const fpsValues = frameHistory.map(f => f.fps).filter(f => f !== undefined);
-        const memoryValues = frameHistory.map(f => f.memory?.currentUsage || 0);
+        const memoryValues = frameHistory.map(f => f.memory?.currentUsage || f.memory || 0);
 
         const avgFps = fpsValues.length > 0
             ? fpsValues.reduce((a, b) => a + b, 0) / fpsValues.length
@@ -238,13 +270,17 @@ function setupRoutes(app) {
             ? memoryValues.reduce((a, b) => a + b, 0) / memoryValues.length
             : 0;
 
+        const attachStatus = profilerAttacher.getStatus();
+
         res.json({
             frameCount: frameHistory.length,
             avgFps: Math.round(avgFps * 100) / 100,
             minFps: Math.round(minFps * 100) / 100,
             maxFps: Math.round(maxFps * 100) / 100,
             avgMemory: Math.round(avgMemory / 1024 / 1024), // MB
-            connectedClients: clients.size
+            connectedClients: clients.size,
+            dataMode: attachStatus.mode,
+            attachedPid: attachStatus.pid || null
         });
     });
 
@@ -259,22 +295,136 @@ function setupRoutes(app) {
         });
     });
 
+    // ─────────────────────────────────────────────
+    // Process Attach API
+    // ─────────────────────────────────────────────
+
+    // List running game-like processes
+    app.get('/api/processes', async (req, res) => {
+        try {
+            const procs = await listGameProcesses();
+            res.json({ processes: procs, count: procs.length });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // Attach to a process by PID
+    app.post('/api/attach', (req, res) => {
+        const { pid, processName } = req.body;
+
+        if (!pid) {
+            res.status(400).json({ error: 'pid is required' });
+            return;
+        }
+
+        // Stop simulation/named pipe if running
+        if (simulationTimer) stopSimulation();
+        if (profilerAttacher.getStatus().mode === 'named_pipe') {
+            profilerAttacher.stopNamedPipe();
+        }
+
+        // Attach to the process
+        profilerAttacher.attachProcess(pid, processName || `PID-${pid}`);
+
+        res.json({
+            success: true,
+            status: profilerAttacher.getStatus()
+        });
+    });
+
+    // Detach from current process
+    app.post('/api/detach', (req, res) => {
+        profilerAttacher.detachProcess();
+        res.json({ success: true, status: profilerAttacher.getStatus() });
+    });
+
+    // Spawn a game and attach to it
+    app.post('/api/spawn-and-attach', (req, res) => {
+        const { path: gamePath } = req.body;
+        if (!gamePath) {
+            res.status(400).json({ error: 'path is required' });
+            return;
+        }
+
+        console.log(`[Server] Spawning game: ${gamePath}`);
+        let spawnedPid = null;
+
+        const child = spawn(gamePath, [], {
+            detached: true,
+            stdio: 'ignore',
+            shell: true,
+            windowsHide: true
+        });
+
+        child.on('spawn', () => {
+            spawnedPid = child.pid;
+            console.log(`[Server] Game spawned with PID: ${spawnedPid}`);
+            // Detach from parent so game runs independently
+            child.unref();
+
+            // Small delay to let the process initialize
+            setTimeout(() => {
+                profilerAttacher.attachProcess(spawnedPid, path.basename(gamePath));
+                res.json({ success: true, status: profilerAttacher.getStatus() });
+            }, 2000);
+        });
+
+        child.on('error', (err) => {
+            console.error(`[Server] Spawn error: ${err.message}`);
+            res.status(500).json({ error: err.message });
+        });
+    });
+
+    // Get attach status
+    app.get('/api/attach-status', (req, res) => {
+        const status = profilerAttacher.getStatus();
+        const pipeInfo = status.mode === 'named_pipe' ? profilerAttacher.getPipeInfo() : null;
+        res.json({ ...status, pipeInfo });
+    });
+
+    // Start named pipe server
+    app.post('/api/named-pipe/start', (req, res) => {
+        // Stop simulation
+        if (simulationTimer) stopSimulation();
+
+        profilerAttacher.startNamedPipe();
+        res.json({
+            success: true,
+            status: profilerAttacher.getStatus(),
+            pipeInfo: profilerAttacher.getPipeInfo()
+        });
+    });
+
+    // Stop named pipe server
+    app.post('/api/named-pipe/stop', (req, res) => {
+        profilerAttacher.stopNamedPipe();
+        res.json({ success: true, status: profilerAttacher.getStatus() });
+    });
+
     // Health check
     app.get('/api/health', (req, res) => {
         res.json({
             status: 'ok',
             uptime: process.uptime(),
             clients: clients.size,
-            simulation: simulationRunning
+            simulation: simulationRunning,
+            attachStatus: profilerAttacher.getStatus()
         });
     });
 
     // Simulation control
     app.post('/api/simulation/toggle', (req, res) => {
+        // Stop attach/named pipe
+        profilerAttacher.detachProcess();
+        profilerAttacher.stopNamedPipe();
+
         const running = toggleSimulation();
         res.json({ running });
     });
     app.post('/api/simulation/start', (req, res) => {
+        profilerAttacher.detachProcess();
+        profilerAttacher.stopNamedPipe();
         startSimulation();
         res.json({ running: true });
     });
@@ -377,15 +527,8 @@ function startSimulation() {
         };
         handleProfilerData(frameData);
 
-        // Track profile history for statistics
-        profileHistory.push(profiles);
-        if (profileHistory.length > PROFILE_HISTORY_MAX) {
-            profileHistory.shift();
-        }
-
         // Occasionally trigger a spike scenario (for demo)
         if (frameCount % 300 === 0) {
-            // Every 30 seconds, simulate a render spike
             functionTimers['Render'].base *= 3;
             setTimeout(() => { functionTimers['Render'].base /= 3; }, 2000);
         }
@@ -487,29 +630,35 @@ function analyzeFrameForAlerts(data) {
 
     // Check function profiler alerts (expensive functions)
     if (data.profiles) {
+        const fnStats = computeFunctionStats();
         data.profiles.forEach(p => {
-            // Detect abnormally high function time
-            const fnStats = computeFunctionStats();
-            if (fnStats[p.name]) {
-                const { avg, p95 } = fnStats[p.name];
-                if (p.duration > p95 * 3 && p95 > 0) {
-                    createAlert(
-                        'FUNCTION_SPIKE',
-                        p.duration > p95 * 10 ? 'critical' : 'warning',
-                        `Function "${p.name}" spike: ${p.duration.toFixed(0)}µs`,
-                        `Avg: ${avg.toFixed(0)}µs, P95: ${p95.toFixed(0)}µs, Current: ${p.duration.toFixed(0)}µs`,
-                        p.name, p.duration, p95 * 3
-                    );
-                }
+            const s = fnStats[p.name];
+            if (s && p.duration > s.p95 * 3 && s.p95 > 0) {
+                createAlert(
+                    'FUNCTION_SPIKE',
+                    p.duration > s.p95 * 10 ? 'critical' : 'warning',
+                    `Function "${p.name}" spike: ${p.duration.toFixed(0)}µs`,
+                    `Avg: ${s.avg.toFixed(0)}µs, P95: ${s.p95.toFixed(0)}µs, Current: ${p.duration.toFixed(0)}µs`,
+                    p.name, p.duration, s.p95 * 3
+                );
             }
         });
+    }
+
+    // Process monitor specific alerts
+    if (data._source === 'process_monitor' && data._cpu !== undefined) {
+        if (data._cpu > 90) {
+            createAlert('HIGH_CPU', 'warning',
+                `Process CPU at ${data._cpu.toFixed(0)}%`,
+                `PID ${data._pid} (${data._processName}) is heavily loaded`,
+                'cpu', data._cpu, 90);
+        }
     }
 }
 
 function createAlert(type, severity, message, details, metric, value, threshold) {
     const now = Date.now();
 
-    // Deduplication: skip if same type+severity was emitted recently
     const dedupKey = `${type}_${severity}`;
     if (lastAlertTimes[dedupKey] && (now - lastAlertTimes[dedupKey]) < alertConfig.deduplicationWindowMs) {
         return;
@@ -533,33 +682,26 @@ function createAlert(type, severity, message, details, metric, value, threshold)
 
     alerts.push(alert);
 
-    // Update stats
     alertStats.totalAlerts = alerts.length;
     if (severity === 'info') alertStats.infoCount++;
     else if (severity === 'warning') alertStats.warningCount++;
     else if (severity === 'critical') alertStats.criticalCount++;
     alertStats.unacknowledgedCount = alerts.filter(a => !a.acknowledged).length;
 
-    // Trim alerts
     while (alerts.length > alertConfig.maxAlerts) {
         alerts.shift();
     }
 
-    // Broadcast alert to all WebSocket clients
-    broadcast({
-        type: 'alert',
-        data: alert
-    });
+    broadcast({ type: 'alert', data: alert });
 }
 
 function getActiveAlerts() {
-    const cutoff = Date.now() - 30000; // Active within last 30s
+    const cutoff = Date.now() - 30000;
     return alerts.filter(a => !a.acknowledged && a.timestamp > cutoff);
 }
 
 // Main server startup function
 function startServer() {
-    // Initialize express app
     const app = express();
     app.use(cors());
     app.use(express.json());
@@ -577,30 +719,22 @@ function startServer() {
         }
     }
 
-    // Setup routes
     setupRoutes(app);
 
-    // HTTP server for static files and REST API
     server = http.createServer(app);
-
-    // Separate server for WebSocket
     wsServer = http.createServer();
 
-    // WebSocket server
     wss = new WebSocket.Server({ server: wsServer });
 
-    // WebSocket connection handler
     wss.on('connection', (ws) => {
         console.log('[WS] Client connected');
         clients.add(ws);
 
-        // Send welcome message
         ws.send(JSON.stringify({
             type: 'welcome',
             message: 'Connected to Game Performance Profiler'
         }));
 
-        // Send latest data if available
         if (latestFrameData) {
             ws.send(JSON.stringify({
                 type: 'frame_update',
@@ -608,16 +742,59 @@ function startServer() {
             }));
         }
 
+        // Send current attach status on connect
+        ws.send(JSON.stringify({
+            type: 'attach_status',
+            data: profilerAttacher.getStatus()
+        }));
+
         ws.on('message', (message) => {
             try {
                 const data = JSON.parse(message);
+
                 if (data.type === 'simulation_control') {
-                    const wasRunning = simulationRunning;
+                    // Stop attach/named pipe, control simulation
+                    profilerAttacher.detachProcess();
+                    profilerAttacher.stopNamedPipe();
                     if (data.action === 'start') startSimulation();
                     else if (data.action === 'stop') stopSimulation();
                     else if (data.action === 'toggle') toggleSimulation();
-                    // Notify all clients of new simulation state
                     broadcast({ type: 'simulation_status', running: simulationRunning });
+
+                } else if (data.type === 'attach_process') {
+                    // Attach to a process by PID
+                    const pid = parseInt(data.pid);
+                    const name = data.processName || '';
+                    if (pid) {
+                        if (simulationTimer) stopSimulation();
+                        profilerAttacher.stopNamedPipe();
+                        profilerAttacher.attachProcess(pid, name);
+                        broadcast({
+                            type: 'attach_status',
+                            data: profilerAttacher.getStatus()
+                        });
+                    }
+
+                } else if (data.type === 'detach_process') {
+                    profilerAttacher.detachProcess();
+                    broadcast({
+                        type: 'attach_status',
+                        data: profilerAttacher.getStatus()
+                    });
+
+                } else if (data.type === 'named_pipe_control') {
+                    if (data.action === 'start') {
+                        if (simulationTimer) stopSimulation();
+                        profilerAttacher.detachProcess();
+                        profilerAttacher.startNamedPipe();
+                    } else if (data.action === 'stop') {
+                        profilerAttacher.stopNamedPipe();
+                    }
+                    broadcast({
+                        type: 'attach_status',
+                        data: profilerAttacher.getStatus()
+                    });
+
                 } else if (data.type === 'acknowledge_alert') {
                     const alert = alerts.find(a => a.id === data.alertId);
                     if (alert) {
@@ -626,6 +803,7 @@ function startServer() {
                         alertStats.unacknowledgedCount = alerts.filter(a => !a.acknowledged).length;
                         broadcast({ type: 'alert_acknowledged', data: alert });
                     }
+
                 } else if (data.type === 'acknowledge_all_alerts') {
                     alerts.forEach(a => {
                         if (!a.acknowledged) {
@@ -635,6 +813,7 @@ function startServer() {
                     });
                     alertStats.unacknowledgedCount = 0;
                     broadcast({ type: 'alerts_all_acknowledged', data: {} });
+
                 } else {
                     handleProfilerData(data);
                 }
@@ -653,7 +832,6 @@ function startServer() {
         });
     });
 
-    // Start servers
     server.listen(PORT, () => {
         console.log(`[HTTP] Server running on http://localhost:${PORT}`);
     });
@@ -662,14 +840,14 @@ function startServer() {
         console.log(`[WS] WebSocket server running on ws://localhost:${WS_PORT}`);
     });
 
-    // Start simulation if enabled
     if (IS_ELECTRON || process.env.SIMULATION === 'true') {
         startSimulation();
     }
 
-    // Graceful shutdown
     process.on('SIGINT', () => {
         console.log('\n[Server] Shutting down...');
+        profilerAttacher.detachProcess();
+        profilerAttacher.stopNamedPipe();
         if (wss) wss.close();
         if (server) server.close();
         process.exit(0);

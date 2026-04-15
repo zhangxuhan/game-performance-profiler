@@ -10,10 +10,99 @@
         <span class="status-badge" :class="connected ? 'connected' : 'disconnected'">
           {{ connected ? '● Connected' : '○ Disconnected' }}
         </span>
+<span class="mode-badge" :class="'mode-' + dataMode">{{ modeLabel }}</span>
+        <button class="attach-btn" @click="openAttachModal">🎯 Attach</button>
         <button class="sim-btn" :class="{ active: simulationOn }" @click="toggleSimulation">
           <span class="dot"></span>
           {{ simulationOn ? 'Simulation ON' : 'Simulation OFF' }}
         </button>
+      </div>
+    </div>
+
+    <!-- Attach Process Modal -->
+    <div class="modal-overlay" v-if="showAttachModal" @click.self="closeAttachModal">
+      <div class="modal-dialog">
+        <div class="modal-header">
+          <span class="modal-title">🎯 Attach to Process</span>
+          <button class="modal-close" @click="closeAttachModal">✕</button>
+        </div>
+        <div class="pipe-info-box" v-if="pipeInfo">
+          <span class="pipe-info-label">Named Pipe:</span>
+          <code class="pipe-info-path">{{ pipeInfo.pipePath }}</code>
+          <span class="pipe-info-clients" v-if="pipeInfo.connectedClients > 0">{{ pipeInfo.connectedClients }} client(s)</span>
+        </div>
+        <div class="modal-tabs">
+          <button class="tab-btn" :class="{ active: attachTab === 'process' }" @click="attachTab = 'process'; fetchProcessList()">Running Processes</button>
+          <button class="tab-btn" :class="{ active: attachTab === 'pipe' }" @click="attachTab = 'pipe'">Named Pipe</button>
+          <button class="tab-btn" :class="{ active: attachTab === 'custom' }" @click="attachTab = 'custom'">Custom Path</button>
+        </div>
+        <div v-if="attachTab === 'process'" class="modal-tab-content">
+          <div class="process-search-row">
+            <input v-model="processSearch" class="process-search" placeholder="Filter processes..." />
+            <button class="refresh-btn" @click="fetchProcessList" :disabled="loadingProcesses">↻ {{ loadingProcesses ? 'Loading...' : 'Refresh' }}</button>
+          </div>
+          <div class="process-list">
+            <div v-for="proc in filteredProcesses" :key="proc.pid"
+                 class="process-item" :class="{ selected: selectedPid === proc.pid }"
+                 @click="selectedPid = proc.pid; selectedProcessName = proc.name">
+              <div class="process-item-left">
+                <span class="process-icon">🎮</span>
+                <div class="process-info">
+                  <span class="process-name">{{ proc.name }}</span>
+                  <span class="process-title" v-if="proc.windowTitle">{{ proc.windowTitle }}</span>
+                </div>
+              </div>
+              <div class="process-item-right">
+                <span class="process-mem">{{ proc.memoryMB }} MB</span>
+                <span class="process-pid">PID {{ proc.pid }}</span>
+              </div>
+            </div>
+            <div class="process-empty" v-if="!loadingProcesses && processList.length === 0">No game processes found</div>
+            <div class="process-empty" v-if="loadingProcesses">Loading processes...</div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn-cancel" @click="closeAttachModal">Cancel</button>
+            <button class="btn-attach" :disabled="!selectedPid || attaching" @click="doAttachProcess">
+              {{ attaching ? 'Attaching...' : '▶ Attach to Selected' }}
+            </button>
+          </div>
+        </div>
+        <div v-if="attachTab === 'pipe'" class="modal-tab-content">
+          <div class="pipe-desc">
+            <p>Games with the <code>profiler-agent</code> library connect here and stream real profiling data (FPS, frame time, function breakdown) with zero instrumentation needed.</p>
+          </div>
+          <div class="pipe-steps">
+            <div class="pipe-step"><span class="pipe-step-num">1</span><span>Add <code>profiler-agent</code> to your game</span></div>
+            <div class="pipe-step"><span class="pipe-step-num">2</span><span>Game connects to <code>\\.\pipe\GameProfilerStream</code></span></div>
+            <div class="pipe-step"><span class="pipe-step-num">3</span><span>Click <b>Start Named Pipe</b> then start your game</span></div>
+          </div>
+          <div class="pipe-status" v-if="attachStatus.mode === 'named_pipe'">
+            <span class="pipe-active">● Named Pipe Active — {{ pipeInfo?.connectedClients || 0 }} client(s) connected</span>
+          </div>
+          <div class="pipe-error-msg" v-if="pipeInfo?.error">⚠️ {{ pipeInfo.error }}</div>
+          <div class="modal-footer">
+            <button class="btn-cancel" @click="closeAttachModal">Cancel</button>
+            <button v-if="attachStatus.mode !== 'named_pipe'" class="btn-attach" @click="doStartNamedPipe">▶ Start Named Pipe Server</button>
+            <button v-else class="btn-detach" @click="doStopNamedPipe">■ Stop Named Pipe</button>
+          </div>
+        </div>
+        <div v-if="attachTab === 'custom'" class="modal-tab-content">
+          <div class="custom-desc">
+            <p>Enter the full path to a game executable. The profiler will launch it and monitor CPU/memory usage.</p>
+          </div>
+          <input v-model="customPath" class="custom-path-input" placeholder="C:\Games\MyGame.exe" />
+          <div class="custom-note">⚠️ For games without profiler-agent, FPS is estimated from CPU activity. For best results, use Named Pipe mode.</div>
+          <div class="modal-footer">
+            <button class="btn-cancel" @click="closeAttachModal">Cancel</button>
+            <button class="btn-attach" :disabled="!customPath.trim()" @click="doAttachCustomPath">▶ Launch &amp; Attach</button>
+          </div>
+        </div>
+        <div class="attach-status-bar" v-if="attachStatus.mode === 'process_monitor'">
+          <span class="attach-status-icon">🎮</span>
+          <span class="attach-status-name">{{ attachStatus.processName || 'PID ' + attachStatus.pid }}</span>
+          <span class="attach-status-pid">PID {{ attachStatus.pid }}</span>
+          <button class="btn-detach-sm" @click="doDetachProcess">Detach</button>
+        </div>
       </div>
     </div>
 
@@ -246,6 +335,19 @@ const activeFunctions = ref([
 const alerts = ref([])
 const maxVisibleAlerts = 10
 
+// Attach process state
+const showAttachModal = ref(false)
+const attachTab = ref('process')
+const attachStatus = ref({ mode: 'none', pid: null, processName: '' })
+const pipeInfo = ref(null)
+const processList = ref([])
+const loadingProcesses = ref(false)
+const processSearch = ref('')
+const selectedPid = ref(null)
+const selectedProcessName = ref('')
+const attaching = ref(false)
+const customPath = ref('')
+
 let fpsChart = null
 let memoryChart = null
 let funcChart = null
@@ -256,6 +358,16 @@ const chartRangeLabel = computed(() => `Last ${maxDataPoints} frames`)
 
 const hasCriticalAlerts = computed(() => alerts.value.some(a => a.severity === 'critical' && !a.acknowledged))
 const unacknowledgedCount = computed(() => alerts.value.filter(a => !a.acknowledged).length)
+
+// Data mode indicator
+const dataMode = computed(() => attachStatus.value.mode || (simulationOn.value ? 'simulation' : 'none'))
+const modeLabel = computed(() => {
+  const m = dataMode.value
+  if (m === 'simulation') return '🎲 Sim'
+  if (m === 'named_pipe') return '🔌 Pipe'
+  if (m === 'process_monitor') return '🎮 PID ' + (attachStatus.value.pid || '')
+  return '—'
+})
 const visibleAlerts = computed(() => {
   const active = alerts.value.filter(a => !a.acknowledged)
   const acked = alerts.value.filter(a => a.acknowledged)
@@ -667,6 +779,12 @@ function connectWebSocket() {
         }
       } else if (msg.type === 'alerts_all_acknowledged') {
         alerts.value.forEach(a => { a.acknowledged = true })
+      } else if (msg.type === 'attach_status') {
+        attachStatus.value = msg.data || { mode: 'none' }
+        pipeInfo.value = msg.data?.pipeInfo || null
+      } else if (msg.type === 'attach_process_exited') {
+        // Process exited, detach
+        attachStatus.value = { mode: 'none', pid: null, processName: '' }
       }
     } catch {}
   }
@@ -775,6 +893,114 @@ function handleIncomingAlert(alert) {
   if (alerts.value.length > 50) {
     alerts.value = alerts.value.slice(-50)
   }
+}
+
+// ─────────────────────────────────────────────
+// Attach Process Functions
+// ─────────────────────────────────────────────
+
+async function fetchProcessList() {
+  loadingProcesses.value = true
+  try {
+    const res = await fetch('http://localhost:8080/api/processes')
+    const data = await res.json()
+    processList.value = data.processes || []
+  } catch {
+    processList.value = []
+  } finally {
+    loadingProcesses.value = false
+  }
+}
+
+const filteredProcesses = computed(() => {
+  const q = processSearch.value.toLowerCase()
+  if (!q) return processList.value
+  return processList.value.filter(p =>
+    p.name.toLowerCase().includes(q) ||
+    (p.windowTitle && p.windowTitle.toLowerCase().includes(q)) ||
+    p.pid.toString().includes(q)
+  )
+})
+
+function openAttachModal() {
+  showAttachModal.value = true
+  attachTab.value = 'process'
+  selectedPid.value = null
+  selectedProcessName.value = ''
+  fetchProcessList()
+  // Fetch current attach status
+  fetchAttachStatus()
+}
+
+function closeAttachModal() {
+  showAttachModal.value = false
+}
+
+async function fetchAttachStatus() {
+  try {
+    const res = await fetch('http://localhost:8080/api/attach-status')
+    const data = await res.json()
+    attachStatus.value = data
+    pipeInfo.value = data.pipeInfo || null
+  } catch {}
+}
+
+async function doAttachProcess() {
+  if (!selectedPid.value) return
+  attaching.value = true
+  try {
+    const res = await fetch('http://localhost:8080/api/attach', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pid: selectedPid.value, processName: selectedProcessName.value })
+    })
+    const data = await res.json()
+    if (data.status) attachStatus.value = data.status
+    closeAttachModal()
+  } catch (e) {
+    console.error('Attach failed:', e)
+  } finally {
+    attaching.value = false
+  }
+}
+
+async function doDetachProcess() {
+  try {
+    await fetch('http://localhost:8080/api/detach', { method: 'POST' })
+    attachStatus.value = { mode: 'none', pid: null, processName: '' }
+  } catch {}
+}
+
+async function doStartNamedPipe() {
+  try {
+    const res = await fetch('http://localhost:8080/api/named-pipe/start', { method: 'POST' })
+    const data = await res.json()
+    if (data.status) attachStatus.value = data.status
+    pipeInfo.value = data.pipeInfo || null
+  } catch {}
+}
+
+async function doStopNamedPipe() {
+  try {
+    await fetch('http://localhost:8080/api/named-pipe/stop', { method: 'POST' })
+    attachStatus.value = { mode: 'none', pid: null, processName: '' }
+    pipeInfo.value = null
+  } catch {}
+}
+
+async function doAttachCustomPath() {
+  if (!customPath.value.trim()) return
+  // Spawn the process, then attach
+  try {
+    const res = await fetch('http://localhost:8080/api/spawn-and-attach', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: customPath.value.trim() })
+    })
+    const data = await res.json()
+    if (data.status) attachStatus.value = data.status
+    closeAttachModal()
+  } catch {}
 }
 </script>
 
@@ -1377,6 +1603,286 @@ body {
   font-size: 14px;
   opacity: 0.6;
 }
+
+/* Mode badge */
+.mode-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 12px;
+  border: 1px solid;
+  letter-spacing: 0.3px;
+}
+.mode-badge.mode-simulation { background: rgba(100,100,180,0.12); color: #8888cc; border-color: rgba(100,100,200,0.25); }
+.mode-badge.mode-named_pipe { background: rgba(79,195,247,0.12); color: #4fc3f7; border-color: rgba(79,195,247,0.3); }
+.mode-badge.mode-process_monitor { background: rgba(105,240,174,0.12); color: #69f0ae; border-color: rgba(105,240,174,0.3); }
+.mode-badge.mode-none { background: rgba(80,80,80,0.12); color: #555; border-color: rgba(80,80,80,0.2); }
+
+/* Attach button */
+.attach-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 16px;
+  border-radius: 20px;
+  border: 1px solid rgba(105,240,174,0.35);
+  background: rgba(105,240,174,0.08);
+  color: #69f0ae;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.attach-btn:hover { background: rgba(105,240,174,0.15); border-color: rgba(105,240,174,0.5); }
+
+/* Modal Overlay */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999;
+  backdrop-filter: blur(4px);
+}
+
+.modal-dialog {
+  background: #13132b;
+  border: 1px solid #2a2a5a;
+  border-radius: 16px;
+  width: 680px;
+  max-width: 95vw;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 24px 80px rgba(0,0,0,0.6);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px 0;
+}
+
+.modal-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #e0e0f0;
+}
+
+.modal-close {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid #2a2a5a;
+  background: #1a1a35;
+  color: #666;
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+.modal-close:hover { background: #222245; color: #ddd; }
+
+.pipe-info-box {
+  margin: 12px 24px 0;
+  padding: 8px 12px;
+  background: rgba(79,195,247,0.05);
+  border: 1px solid rgba(79,195,247,0.2);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.pipe-info-label { color: #555; }
+.pipe-info-path { color: #4fc3f7; font-size: 11px; background: rgba(79,195,247,0.08); padding: 2px 6px; border-radius: 4px; }
+.pipe-info-clients { color: #00e676; margin-left: auto; }
+
+/* Modal Tabs */
+.modal-tabs {
+  display: flex;
+  gap: 0;
+  padding: 16px 24px 0;
+  border-bottom: 1px solid #1e1e3f;
+}
+
+.tab-btn {
+  padding: 8px 20px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: #555;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-bottom: -1px;
+}
+.tab-btn:hover { color: #aaa; }
+.tab-btn.active { color: #69f0ae; border-bottom-color: #69f0ae; }
+
+.modal-tab-content {
+  padding: 16px 24px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+/* Process List */
+.process-search-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.process-search {
+  flex: 1;
+  background: #0d0d1a;
+  border: 1px solid #2a2a5a;
+  border-radius: 8px;
+  padding: 8px 12px;
+  color: #e0e0e0;
+  font-size: 13px;
+  outline: none;
+}
+.process-search:focus { border-color: rgba(105,240,174,0.4); }
+.process-search::placeholder { color: #444; }
+
+.refresh-btn {
+  padding: 8px 16px;
+  background: #1a1a35;
+  border: 1px solid #2a2a5a;
+  border-radius: 8px;
+  color: #888;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+.refresh-btn:hover { background: #222245; color: #aaa; }
+.refresh-btn:disabled { opacity: 0.5; cursor: default; }
+
+.process-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.process-list::-webkit-scrollbar { width: 4px; }
+.process-list::-webkit-scrollbar-thumb { background: #2a2a5a; border-radius: 2px; }
+
+.process-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.process-item:hover { background: rgba(105,240,174,0.05); border-color: rgba(105,240,174,0.15); }
+.process-item.selected { background: rgba(105,240,174,0.1); border-color: rgba(105,240,174,0.4); }
+
+.process-item-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.process-icon { font-size: 18px; flex-shrink: 0; }
+.process-info { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.process-name { font-size: 13px; font-weight: 600; color: #d0d0e0; }
+.process-title { font-size: 11px; color: #555; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.process-item-right { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; flex-shrink: 0; }
+.process-mem { font-size: 12px; color: #4fc3f7; font-weight: 500; }
+.process-pid { font-size: 10px; color: #444; }
+
+.process-empty {
+  text-align: center;
+  color: #444;
+  font-size: 13px;
+  padding: 32px;
+}
+
+/* Pipe tab */
+.pipe-desc { color: #888; font-size: 13px; line-height: 1.6; margin-bottom: 16px; }
+.pipe-desc code { background: rgba(79,195,247,0.08); color: #4fc3f7; padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+
+.pipe-steps { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
+.pipe-step { display: flex; align-items: flex-start; gap: 10px; font-size: 13px; color: #888; line-height: 1.4; }
+.pipe-step-num {
+  width: 22px; height: 22px; border-radius: 50%; background: rgba(105,240,174,0.15);
+  color: #69f0ae; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.pipe-step code { background: rgba(79,195,247,0.08); color: #4fc3f7; padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+
+.pipe-status { padding: 10px 12px; background: rgba(79,195,247,0.05); border: 1px solid rgba(79,195,247,0.2); border-radius: 8px; margin-bottom: 12px; }
+.pipe-active { color: #4fc3f7; font-size: 13px; font-weight: 600; }
+.pipe-error-msg { color: #ef5350; font-size: 13px; padding: 8px 12px; background: rgba(239,83,80,0.06); border: 1px solid rgba(239,83,80,0.2); border-radius: 8px; margin-bottom: 12px; }
+
+/* Custom path tab */
+.custom-desc { color: #888; font-size: 13px; line-height: 1.6; margin-bottom: 12px; }
+.custom-path-input {
+  width: 100%; background: #0d0d1a; border: 1px solid #2a2a5a; border-radius: 8px;
+  padding: 10px 12px; color: #e0e0e0; font-size: 13px; outline: none; margin-bottom: 12px;
+}
+.custom-path-input:focus { border-color: rgba(105,240,174,0.4); }
+.custom-path-input::placeholder { color: #444; }
+.custom-note { font-size: 12px; color: #555; line-height: 1.5; }
+
+/* Modal footer */
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid #1e1e3f;
+  margin-top: 4px;
+}
+
+.btn-cancel {
+  padding: 8px 20px; border-radius: 8px; border: 1px solid #2a2a5a;
+  background: #1a1a35; color: #888; font-size: 13px; cursor: pointer; transition: all 0.2s;
+}
+.btn-cancel:hover { background: #222245; color: #bbb; }
+
+.btn-attach {
+  padding: 8px 20px; border-radius: 8px; border: 1px solid rgba(105,240,174,0.4);
+  background: rgba(105,240,174,0.12); color: #69f0ae; font-size: 13px; font-weight: 600;
+  cursor: pointer; transition: all 0.2s;
+}
+.btn-attach:hover:not(:disabled) { background: rgba(105,240,174,0.2); }
+.btn-attach:disabled { opacity: 0.4; cursor: default; }
+
+.btn-detach {
+  padding: 8px 20px; border-radius: 8px; border: 1px solid rgba(239,83,80,0.4);
+  background: rgba(239,83,80,0.08); color: #ef5350; font-size: 13px; font-weight: 600;
+  cursor: pointer; transition: all 0.2s;
+}
+.btn-detach:hover { background: rgba(239,83,80,0.15); }
+
+/* Attach status bar */
+.attach-status-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 24px;
+  background: rgba(105,240,174,0.06);
+  border-top: 1px solid rgba(105,240,174,0.15);
+  font-size: 12px;
+}
+.attach-status-icon { font-size: 14px; }
+.attach-status-name { color: #69f0ae; font-weight: 600; }
+.attach-status-pid { color: #555; margin-left: 4px; }
+.btn-detach-sm {
+  margin-left: auto; padding: 4px 12px; border-radius: 6px; border: 1px solid rgba(239,83,80,0.3);
+  background: rgba(239,83,80,0.06); color: #ef5350; font-size: 11px; cursor: pointer; transition: all 0.2s;
+}
+.btn-detach-sm:hover { background: rgba(239,83,80,0.12); }
 
 /* Disconnected State */
 .disconnected-state {

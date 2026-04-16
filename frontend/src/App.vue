@@ -1,22 +1,24 @@
 <template>
   <div id="app">
-    <!-- Header -->
-    <div class="header">
+    <!-- Header (when attached) -->
+    <div class="header" v-if="isAttached">
       <div class="header-left">
         <span class="logo">📊</span>
         <span class="title">Game Performance Profiler</span>
       </div>
       <div class="header-right">
-        <span class="status-badge" :class="connected ? 'connected' : 'disconnected'">
-          {{ connected ? '● Connected' : '○ Disconnected' }}
+        <span class="attach-status-badge">
+          🎮 {{ attachStatus.processName || 'PID ' + attachStatus.pid }}
         </span>
-<span class="mode-badge" :class="'mode-' + dataMode">{{ modeLabel }}</span>
-        <button class="attach-btn" @click="openAttachModal">🎯 Attach</button>
-        <button class="sim-btn" :class="{ active: simulationOn }" @click="toggleSimulation">
-          <span class="dot"></span>
-          {{ simulationOn ? 'Simulation ON' : 'Simulation OFF' }}
-        </button>
-        <button class="settings-btn" @click="openSettings" title="Settings (S)">⚙️</button>
+        <button class="detach-btn" @click="doDetachProcess">Detach</button>
+      </div>
+    </div>
+
+    <!-- Header (not attached) -->
+    <div class="header header-minimal" v-else>
+      <div class="header-left">
+        <span class="logo">📊</span>
+        <span class="title">Game Performance Profiler</span>
       </div>
     </div>
 
@@ -149,32 +151,23 @@
         </div>
         <div v-if="attachTab === 'process'" class="modal-tab-content">
           <div class="process-search-row">
-            <input v-model="processSearch" class="process-search" placeholder="Filter processes..." />
-            <button class="refresh-btn" @click="fetchProcessList" :disabled="loadingProcesses">↻ {{ loadingProcesses ? 'Loading...' : 'Refresh' }}</button>
+            <input v-model="processSearch" class="process-search" placeholder="Search..." />
+            <button class="refresh-btn" @click="fetchProcessList" :disabled="loadingProcesses">↻</button>
           </div>
-          <div class="process-list">
+          <div class="process-list process-list-simple">
             <div v-for="proc in filteredProcesses" :key="proc.pid"
-                 class="process-item" :class="{ selected: selectedPid === proc.pid }"
+                 class="process-item-simple" :class="{ selected: selectedPid === proc.pid }"
                  @click="selectedPid = proc.pid; selectedProcessName = proc.name">
-              <div class="process-item-left">
-                <span class="process-icon">🎮</span>
-                <div class="process-info">
-                  <span class="process-name">{{ proc.name }}</span>
-                  <span class="process-title" v-if="proc.windowTitle">{{ proc.windowTitle }}</span>
-                </div>
-              </div>
-              <div class="process-item-right">
-                <span class="process-mem">{{ proc.memoryMB }} MB</span>
-                <span class="process-pid">PID {{ proc.pid }}</span>
-              </div>
+              <span class="process-name">{{ proc.name }}</span>
+              <span class="process-pid">{{ proc.pid }}</span>
             </div>
-            <div class="process-empty" v-if="!loadingProcesses && processList.length === 0">No game processes found</div>
-            <div class="process-empty" v-if="loadingProcesses">Loading processes...</div>
+            <div class="process-empty" v-if="!loadingProcesses && processList.length === 0">No processes found</div>
+            <div class="process-empty" v-if="loadingProcesses">Loading...</div>
           </div>
           <div class="modal-footer">
             <button class="btn-cancel" @click="closeAttachModal">Cancel</button>
-            <button class="btn-attach" :disabled="!selectedPid || attaching" @click="doAttachProcess">
-              {{ attaching ? 'Attaching...' : '▶ Attach to Selected' }}
+            <button class="btn-attach btn-attach-large" :disabled="!selectedPid || attaching" @click="doAttachProcess">
+              {{ attaching ? 'Attaching...' : '▶ Attach' }}
             </button>
           </div>
         </div>
@@ -218,7 +211,7 @@
     </div>
 
     <!-- Main Dashboard -->
-    <div class="dashboard" v-if="connected">
+    <div class="dashboard" v-if="isAttached">
       <!-- Big FPS Display -->
       <div class="hero-fps">
         <div class="fps-number" :style="{ color: fpsColor }">{{ fps }}</div>
@@ -411,15 +404,14 @@
       </div>
     </div>
 
-    <!-- Disconnected State -->
-    <div class="disconnected-state" v-else>
-      <div class="disconnected-icon">📡</div>
-      <div class="disconnected-title">Waiting for Data...</div>
-      <div class="disconnected-sub">Make sure the backend server is running with simulation enabled.</div>
-      <div class="sim-prompt">
-        <button class="sim-btn large" :class="{ active: simulationOn }" @click="toggleSimulation">
-          <span class="dot"></span>
-          {{ simulationOn ? 'Simulation Running' : 'Start Simulation' }}
+    <!-- Attach Screen (when not attached) -->
+    <div class="attach-screen" v-else>
+      <div class="attach-content">
+        <div class="attach-icon">🎮</div>
+        <div class="attach-title">Attach to a Process</div>
+        <div class="attach-sub">Select a game or application to start profiling</div>
+        <button class="attach-button-large" @click="openAttachModal">
+          🎯 Attach to Process
         </button>
       </div>
     </div>
@@ -500,6 +492,11 @@ const selectedPid = ref(null)
 const selectedProcessName = ref('')
 const attaching = ref(false)
 const customPath = ref('')
+
+// Computed: is currently attached to a process
+const isAttached = computed(() => {
+  return attachStatus.value.mode === 'process' && attachStatus.value.pid !== null
+})
 
 let fpsChart = null
 let memoryChart = null
@@ -2353,6 +2350,130 @@ body {
   padding: 12px 32px;
   font-size: 15px;
   border-radius: 24px;
+}
+
+/* Attach Screen (new simplified UI) */
+.attach-screen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 80vh;
+}
+
+.attach-content {
+  text-align: center;
+  padding: 60px;
+}
+
+.attach-icon {
+  font-size: 80px;
+  margin-bottom: 24px;
+}
+
+.attach-title {
+  font-size: 28px;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 12px;
+}
+
+.attach-sub {
+  font-size: 16px;
+  color: #666;
+  margin-bottom: 40px;
+}
+
+.attach-button-large {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  padding: 20px 48px;
+  font-size: 20px;
+  font-weight: 600;
+  border-radius: 16px;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 4px 20px rgba(102, 126, 234, 0.4);
+}
+
+.attach-button-large:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 28px rgba(102, 126, 234, 0.5);
+}
+
+/* Header minimal */
+.header-minimal {
+  background: #f8f9fa;
+  border-bottom: 1px solid #eee;
+}
+
+/* Attach status badge */
+.attach-status-badge {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.detach-btn {
+  background: #ef5350;
+  color: white;
+  border: none;
+  padding: 8px 20px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.detach-btn:hover {
+  background: #e53935;
+}
+
+/* Simplified process list */
+.process-list-simple {
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid #eee;
+  border-radius: 8px;
+}
+
+.process-item-simple {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 16px;
+  cursor: pointer;
+  border-bottom: 1px solid #f5f5f5;
+  transition: background 0.15s;
+}
+
+.process-item-simple:hover {
+  background: #f8f9fa;
+}
+
+.process-item-simple.selected {
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+  border-left: 4px solid #667eea;
+}
+
+.process-item-simple .process-name {
+  font-weight: 500;
+  color: #333;
+}
+
+.process-item-simple .process-pid {
+  color: #999;
+  font-size: 13px;
+}
+
+/* Larger attach button */
+.btn-attach-large {
+  padding: 14px 36px;
+  font-size: 16px;
+  border-radius: 10px;
 }
 
 /* Responsive */

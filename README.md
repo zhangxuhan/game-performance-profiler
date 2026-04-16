@@ -50,6 +50,41 @@ Windows 游戏性能分析工具 — 开箱即用，无需配置。
 
 支持：一键确认、全部确认、去重过滤
 
+### GPU 性能分析
+
+新增 GPU Profiler 模块，提供完整的 GPU 性能分析能力：
+
+| 指标 | 说明 |
+|------|------|
+| **GPU Frame Time** | GPU 渲染帧时间（微秒） |
+| **GPU Utilization** | GPU 利用率（0-100%） |
+| **Draw Calls** | 每帧绘制调用次数 |
+| **Triangles** | 每帧渲染三角形数量 |
+| **Texture Memory** | GPU 纹理内存占用 |
+| **VRAM Usage** | 显存使用量和总量 |
+| **Driver Overhead** | CPU 在 GPU 驱动中的耗时 |
+| **VSync Wait** | 等待垂直同步的时间 |
+| **Shader Complexity** | 着色器复杂度评分 |
+| **Compute Load** | GPU 计算负载 |
+
+**CPU/GPU 瓶颈检测**：
+- 自动分析 CPU 和 GPU 的负载比例
+- 识别当前性能瓶颈（CPU/GPU/内存）
+- 计算瓶颈分数（0-100%）
+
+**GPU 性能评分**：
+- **Overall Score** - 综合 GPU 性能评分（0-100）
+- **Efficiency Score** - GPU 效率评分（考虑驱动开销和 VSync 等待）
+- **Thermal Score** - 热管理评分（检测降频）
+
+**GPU 警报类型**：
+- 高 GPU 帧时间
+- 低 GPU 利用率（CPU 瓶颈）
+- 显存压力过高
+- 驱动开销过大
+- VSync 等待过长
+- 疑似热降频
+
 ### FPS 状态颜色
 
 | 颜色 | 范围 | 含义 |
@@ -77,6 +112,20 @@ void onFrame(float fps, float frameTime, size_t memoryBytes) {
     };
     ws.send(data.dump());
 }
+
+// GPU 性能数据推送（C++ 原生引擎）
+void onGPUFrame(double gpuTimeUs, double gpuBusyUs, int drawCalls, int triangles) {
+    using namespace ProfilerCore;
+    GPUProfiler* gpu = ProfilerCore::GetInstance().GetGPUProfiler();
+    
+    gpu->RecordGPUFrameTime(gpuTimeUs, gpuBusyUs, gpuTimeUs - gpuBusyUs);
+    gpu->RecordDrawCalls(drawCalls, triangles, drawCalls * 1000);
+    gpu->RecordMemoryUsage(textureMemBytes, vramUsedBytes, vramTotalBytes);
+    
+    // 获取瓶颈分析
+    std::string bottleneck = ProfilerCore::GetInstance().GetCurrentBottleneck();
+    std::cout << "Current bottleneck: " << bottleneck << std::endl;
+}
 ```
 
 ---
@@ -101,7 +150,9 @@ game-performance-profiler/
 └── src/core/          # C++ 原生采样引擎（可选）
     ├── ProfilerCore        # 帧采样与数据导出
     ├── StatisticsAnalyzer  # 统计分析（分位数、稳定性）
-    └── AlertManager        # 实时性能警报系统
+    ├── AlertManager        # 实时性能警报系统
+    ├── BenchmarkRecorder   # 基准测试记录与对比
+    └── GPUProfiler         # GPU 性能分析（帧时间、显存、瓶颈检测）
 ```
 
 ---

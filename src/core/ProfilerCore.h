@@ -10,6 +10,7 @@
 namespace ProfilerCore {
     class StatisticsAnalyzer;
     class AlertManager;
+    class GPUProfiler;
     struct AlertThresholds;
 }
 
@@ -76,6 +77,15 @@ public:
     bool AcknowledgeAlert(int alertId);
     bool AcknowledgeAllAlerts();
     
+    // GPU Profiling
+    GPUProfiler* GetGPUProfiler() { return m_gpuProfiler.get(); }
+    void SetGPUProfilerEnabled(bool enabled);
+    bool IsGPUProfilerEnabled() const { return m_gpuProfilerEnabled; }
+    
+    // Correlated CPU-GPU analysis
+    void RecordCPUGPUFrame(double cpuTimeMs, double gpuTimeUs);
+    std::string GetCurrentBottleneck() const;
+    
     // Data export
     std::string ExportToJSON() const;
     std::string ExportToCSV() const;
@@ -108,6 +118,8 @@ private:
     
     std::unique_ptr<StatisticsAnalyzer> m_analyzer;
     std::unique_ptr<AlertManager> m_alertManager;
+    std::unique_ptr<GPUProfiler> m_gpuProfiler;
+    bool m_gpuProfilerEnabled = true;
     
     struct FunctionStackEntry {
         std::string name;

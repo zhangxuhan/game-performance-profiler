@@ -1,6 +1,7 @@
 #include "ProfilerCore.h"
 #include "StatisticsAnalyzer.h"
 #include "AlertManager.h"
+#include "GPUProfiler.h"
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -21,6 +22,8 @@ ProfilerCore::ProfilerCore() {
     m_allocationCount = 0;
     m_analyzer = std::make_unique<StatisticsAnalyzer>();
     m_alertManager = std::make_unique<AlertManager>();
+    m_gpuProfiler = std::make_unique<GPUProfiler>();
+    m_gpuProfilerEnabled = true;
     
     // Wire alert manager to analyzer output
     m_alertManager->SetOnAlertGenerated([](const Alert& alert) {
@@ -38,6 +41,9 @@ void ProfilerCore::StartSampling() {
     m_isRunning = true;
     m_frameHistory.clear();
     m_analyzer->Reset();
+    if (m_gpuProfiler && m_gpuProfilerEnabled) {
+        m_gpuProfiler->Reset();
+    }
     std::cout << "[Profiler] Sampling started" << std::endl;
 }
 
@@ -99,6 +105,11 @@ void ProfilerCore::EndFrame() {
             stats.avgFps,
             stats.stabilityScore
         );
+    }
+    
+    // Update GPU profiler with CPU frame time for correlation
+    if (m_gpuProfiler && m_gpuProfilerEnabled) {
+        m_gpuProfiler->RecordCPUGPUCorrelation(frameTimeMs, frameDuration);
     }
     
     // Send data to server if callback is set
@@ -226,6 +237,11 @@ std::string ProfilerCore::ExportToJSON() const {
         ss << ",\"alerts\":" << m_alertManager->ExportActiveToJSON();
     }
     
+    // Append GPU profiling data if available
+    if (m_gpuProfiler && m_gpuProfilerEnabled) {
+        ss << ",\"gpu\":" << m_gpuProfiler->ExportToJSON();
+    }
+    
     ss << "}";
     return ss.str();
 }
@@ -273,6 +289,29 @@ bool ProfilerCore::AcknowledgeAllAlerts() {
         return m_alertManager->AcknowledgeAllAlerts();
     }
     return false;
+}
+
+void ProfilerCore::SetGPUProfilerEnabled(bool enabled) {
+    m_gpuProfilerEnabled = enabled;
+    if (m_gpuProfiler) {
+        if (enabled) {
+            // Reset GPU profiler when enabling
+            m_gpuProfiler->Reset();
+        }
+    }
+}
+
+void ProfilerCore::RecordCPUGPUFrame(double cpuTimeMs, double gpuTimeUs) {
+    if (m_gpuProfiler && m_gpuProfilerEnabled) {
+        m_gpuProfiler->RecordCPUGPUCorrelation(cpuTimeMs, gpuTimeUs);
+    }
+}
+
+std::string ProfilerCore::GetCurrentBottleneck() const {
+    if (m_gpuProfiler && m_gpuProfilerEnabled) {
+        return m_gpuProfiler->GetCurrentBottleneck();
+    }
+    return "Unknown";
 }
 
 } // namespace ProfilerCore

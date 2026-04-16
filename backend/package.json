@@ -1,6 +1,6 @@
 {
   "name": "game-performance-profiler",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "author": "Game Performance Profiler",
   "description": "Game Performance Profiler - Desktop Application",
   "main": "main.js",

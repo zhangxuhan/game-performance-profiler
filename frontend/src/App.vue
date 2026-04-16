@@ -16,6 +16,117 @@
           <span class="dot"></span>
           {{ simulationOn ? 'Simulation ON' : 'Simulation OFF' }}
         </button>
+        <button class="settings-btn" @click="openSettings" title="Settings (S)">⚙️</button>
+      </div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div class="toast-container">
+      <transition-group name="toast-fade">
+        <div v-for="toast in toasts" :key="toast.id"
+             class="toast" :class="'toast-' + toast.type">
+          <span class="toast-icon">{{ toastIcon(toast.type) }}</span>
+          <span class="toast-msg">{{ toast.message }}</span>
+        </div>
+      </transition-group>
+    </div>
+
+    <!-- Settings Modal -->
+    <div class="modal-overlay" v-if="showSettingsModal" @click.self="closeSettings">
+      <div class="modal-dialog settings-dialog">
+        <div class="modal-header">
+          <span class="modal-title">⚙️ Settings</span>
+          <button class="modal-close" @click="closeSettings">✕</button>
+        </div>
+        <div class="settings-body">
+          <div class="settings-section">
+            <div class="settings-section-title">🎯 Performance Targets</div>
+            <div class="settings-row">
+              <label class="settings-label">Target FPS</label>
+              <select v-model.number="settings.targetFps" class="settings-select" @change="applySettings">
+                <option :value="30">30 FPS</option>
+                <option :value="60">60 FPS</option>
+                <option :value="120">120 FPS</option>
+                <option :value="144">144 FPS</option>
+                <option :value="240">240 FPS</option>
+              </select>
+            </div>
+            <div class="settings-row">
+              <label class="settings-label">FPS Warning Threshold</label>
+              <div class="settings-slider-row">
+                <input type="range" v-model.number="settings.fpsWarningThreshold"
+                       min="20" max="120" step="5" class="settings-slider" @change="applySettings" />
+                <span class="settings-slider-val">{{ settings.fpsWarningThreshold }} FPS</span>
+              </div>
+            </div>
+            <div class="settings-row">
+              <label class="settings-label">FPS Critical Threshold</label>
+              <div class="settings-slider-row">
+                <input type="range" v-model.number="settings.fpsCriticalThreshold"
+                       min="10" max="90" step="5" class="settings-slider" @change="applySettings" />
+                <span class="settings-slider-val">{{ settings.fpsCriticalThreshold }} FPS</span>
+              </div>
+            </div>
+          </div>
+          <div class="settings-section">
+            <div class="settings-section-title">💾 Memory Alerts</div>
+            <div class="settings-row">
+              <label class="settings-label">Memory Warning (MB)</label>
+              <div class="settings-slider-row">
+                <input type="range" v-model.number="settings.memoryWarningMB"
+                       min="256" max="4096" step="128" class="settings-slider" @change="applySettings" />
+                <span class="settings-slider-val">{{ settings.memoryWarningMB }} MB</span>
+              </div>
+            </div>
+            <div class="settings-row">
+              <label class="settings-label">Memory Critical (MB)</label>
+              <div class="settings-slider-row">
+                <input type="range" v-model.number="settings.memoryCriticalMB"
+                       min="512" max="8192" step="256" class="settings-slider" @change="applySettings" />
+                <span class="settings-slider-val">{{ settings.memoryCriticalMB }} MB</span>
+              </div>
+            </div>
+          </div>
+          <div class="settings-section">
+            <div class="settings-section-title">📊 Display</div>
+            <div class="settings-row">
+              <label class="settings-label">Chart History Length</label>
+              <select v-model.number="settings.chartHistoryLength" class="settings-select" @change="applySettings">
+                <option :value="60">60 frames</option>
+                <option :value="120">120 frames</option>
+                <option :value="240">240 frames</option>
+                <option :value="500">500 frames</option>
+              </select>
+            </div>
+            <div class="settings-row">
+              <label class="settings-label">Show Performance Gauge</label>
+              <label class="settings-toggle">
+                <input type="checkbox" v-model="settings.showGauge" @change="applySettings" />
+                <span class="settings-toggle-slider"></span>
+              </label>
+            </div>
+            <div class="settings-row">
+              <label class="settings-label">Show Frame Time Histogram</label>
+              <label class="settings-toggle">
+                <input type="checkbox" v-model="settings.showHistogram" @change="applySettings" />
+                <span class="settings-toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+          <div class="settings-section">
+            <div class="settings-section-title">⌨️ Keyboard Shortcuts</div>
+            <div class="shortcuts-grid">
+              <div class="shortcut-item"><kbd>Space</kbd><span>Toggle Simulation</span></div>
+              <div class="shortcut-item"><kbd>S</kbd><span>Open Settings</span></div>
+              <div class="shortcut-item"><kbd>Esc</kbd><span>Close Modal</span></div>
+              <div class="shortcut-item"><kbd>A</kbd><span>Attach Process</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="settings-footer">
+          <button class="btn-cancel" @click="resetSettings">Reset Defaults</button>
+          <button class="btn-attach" @click="closeSettings">Done</button>
+        </div>
       </div>
     </div>
 
@@ -140,6 +251,24 @@
         <div class="stat-card">
           <div class="stat-value">{{ stabilityScore }}%</div>
           <div class="stat-label">Stability</div>
+        </div>
+      </div>
+
+      <!-- Performance Gauge + Frame Time Histogram Row -->
+      <div class="gauge-hist-row" v-if="settings.showGauge || settings.showHistogram">
+        <div class="chart-card gauge-card" v-if="settings.showGauge">
+          <div class="chart-header">
+            <span class="chart-title">Performance Score</span>
+            <span class="chart-range" :class="perfScoreClass">{{ perfScoreLabel }}</span>
+          </div>
+          <div ref="gaugeChartRef" class="chart-area gauge-area"></div>
+        </div>
+        <div class="chart-card hist-card" v-if="settings.showHistogram">
+          <div class="chart-header">
+            <span class="chart-title">Frame Time Distribution</span>
+            <span class="chart-range">{{ histogramBinCount }} bins · Last {{ settings.chartHistoryLength }} frames</span>
+          </div>
+          <div ref="histChartRef" class="chart-area hist-area"></div>
         </div>
       </div>
 
@@ -304,6 +433,8 @@ import * as echarts from 'echarts'
 const fpsChartRef = ref(null)
 const memoryChartRef = ref(null)
 const funcChartRef = ref(null)
+const gaugeChartRef = ref(null)
+const histChartRef = ref(null)
 const connected = ref(false)
 const simulationOn = ref(true)
 const fps = ref(0)
@@ -315,7 +446,9 @@ const p95Fps = ref(0)
 const stabilityScore = ref(100)
 const fpsHistory = ref([])
 const memoryHistory = ref([])
-const maxDataPoints = 120
+
+// maxDataPoints is now controlled by settings.chartHistoryLength
+const getDefaultDataPoints = () => 120
 
 // Function profiler state
 const maxFuncDataPoints = 80
@@ -335,6 +468,26 @@ const activeFunctions = ref([
 const alerts = ref([])
 const maxVisibleAlerts = 10
 
+// Settings state
+const showSettingsModal = ref(false)
+const settings = ref({
+  targetFps: 60,
+  fpsWarningThreshold: 45,
+  fpsCriticalThreshold: 30,
+  memoryWarningMB: 1024,
+  memoryCriticalMB: 2048,
+  chartHistoryLength: 120,
+  showGauge: true,
+  showHistogram: true
+})
+
+// Toast notification state
+const toasts = ref([])
+let toastIdCounter = 1
+
+// Computed for histogram bin count
+const histogramBinCount = 20
+
 // Attach process state
 const showAttachModal = ref(false)
 const attachTab = ref('process')
@@ -351,13 +504,46 @@ const customPath = ref('')
 let fpsChart = null
 let memoryChart = null
 let funcChart = null
+let gaugeChart = null
+let histChart = null
 let ws = null
 let reconnectTimer = null
 
-const chartRangeLabel = computed(() => `Last ${maxDataPoints} frames`)
+const chartRangeLabel = computed(() => `Last ${settings.value.chartHistoryLength} frames`)
 
 const hasCriticalAlerts = computed(() => alerts.value.some(a => a.severity === 'critical' && !a.acknowledged))
 const unacknowledgedCount = computed(() => alerts.value.filter(a => !a.acknowledged).length)
+
+// Performance score computed (0-100)
+const performanceScore = computed(() => {
+  if (fpsHistory.value.length < 10) return 100
+  const avg = avgFps.value
+  const target = settings.value.targetFps
+  const stability = stabilityScore.value
+  // Score based on avg FPS vs target (60%) and stability (40%)
+  const fpsRatio = Math.min(1, avg / target)
+  const fpsScore = fpsRatio * 60
+  const stabilityPortion = (stability / 100) * 40
+  return Math.round(fpsScore + stabilityPortion)
+})
+
+const perfScoreLabel = computed(() => {
+  const s = performanceScore.value
+  if (s >= 90) return 'Excellent'
+  if (s >= 75) return 'Good'
+  if (s >= 50) return 'Fair'
+  if (s >= 25) return 'Poor'
+  return 'Critical'
+})
+
+const perfScoreClass = computed(() => {
+  const s = performanceScore.value
+  if (s >= 90) return 'excellent'
+  if (s >= 75) return 'good'
+  if (s >= 50) return 'fair'
+  if (s >= 25) return 'poor'
+  return 'critical'
+})
 
 // Data mode indicator
 const dataMode = computed(() => attachStatus.value.mode || (simulationOn.value ? 'simulation' : 'none'))
@@ -610,6 +796,150 @@ function buildMemoryOption(data) {
   }
 }
 
+function buildGaugeOption(score) {
+  const getColor = (s) => {
+    if (s >= 90) return '#00e676'
+    if (s >= 75) return '#69f0ae'
+    if (s >= 50) return '#ffca28'
+    if (s >= 25) return '#ff7043'
+    return '#ef5350'
+  }
+  return {
+    backgroundColor: 'transparent',
+    series: [{
+      type: 'gauge',
+      startAngle: 200,
+      endAngle: -20,
+      min: 0,
+      max: 100,
+      splitNumber: 5,
+      center: ['50%', '60%'],
+      radius: '85%',
+      axisLine: {
+        lineStyle: {
+          width: 16,
+          color: [
+            [0.25, '#ef5350'],
+            [0.5, '#ff7043'],
+            [0.75, '#ffca28'],
+            [0.9, '#69f0ae'],
+            [1, '#00e676']
+          ]
+        }
+      },
+      pointer: {
+        icon: 'path://M12,2A10,10 0 0,0 12,22A10,10 0 0,0 12,2',
+        length: '60%',
+        width: 6,
+        offsetCenter: [0, '-10%'],
+        itemStyle: { color: getColor(score) }
+      },
+      axisTick: { show: false },
+      splitLine: { show: false },
+      axisLabel: { show: false },
+      title: { show: false },
+      detail: {
+        valueAnimation: true,
+        fontSize: 36,
+        fontWeight: 700,
+        offsetCenter: [0, '25%'],
+        formatter: '{value}',
+        color: getColor(score)
+      },
+      data: [{ value: score, name: '' }]
+    }],
+    animation: true,
+    animationDuration: 600,
+    animationEasing: 'cubicOut'
+  }
+}
+
+function buildHistogramOption(fpsData, bins) {
+  if (!fpsData || fpsData.length < 2) {
+    return {
+      backgroundColor: 'transparent',
+      grid: { top: 8, right: 16, bottom: 28, left: 48 },
+      xAxis: { type: 'category', data: [], axisLine: { lineStyle: { color: '#2a2a4a' } }, axisLabel: { color: '#555' } },
+      yAxis: { type: 'value', splitLine: { lineStyle: { color: '#1e1e3a', type: 'dashed' } }, axisLabel: { color: '#555' } },
+      series: [],
+      animation: false
+    }
+  }
+  // Compute frame times in ms
+  const frameTimes = fpsData.map(fps => fps > 0 ? 1000 / fps : 0).filter(t => t > 0)
+  if (frameTimes.length < 2) {
+    return {
+      backgroundColor: 'transparent',
+      grid: { top: 8, right: 16, bottom: 28, left: 48 },
+      xAxis: { type: 'category', data: [], axisLine: { lineStyle: { color: '#2a2a4a' } }, axisLabel: { color: '#555' } },
+      yAxis: { type: 'value', splitLine: { lineStyle: { color: '#1e1e3a', type: 'dashed' } }, axisLabel: { color: '#555' } },
+      series: [],
+      animation: false
+    }
+  }
+
+  const minTime = Math.min(...frameTimes)
+  const maxTime = Math.max(...frameTimes)
+  const binWidth = (maxTime - minTime) / bins
+
+  // Build histogram bins
+  const histogram = new Array(bins).fill(0)
+  frameTimes.forEach(t => {
+    const idx = Math.min(Math.floor((t - minTime) / binWidth), bins - 1)
+    if (idx >= 0 && idx < bins) histogram[idx]++
+  })
+
+  // Build X-axis labels (bin centers in ms)
+  const xLabels = histogram.map((_, i) => {
+    const center = minTime + (i + 0.5) * binWidth
+    return center.toFixed(1)
+  })
+
+  // Target frame time marker (for target FPS)
+  const targetFrameTime = 1000 / settings.value.targetFps
+
+  return {
+    backgroundColor: 'transparent',
+    grid: { top: 8, right: 16, bottom: 28, left: 48 },
+    xAxis: {
+      type: 'category',
+      data: xLabels,
+      axisLine: { lineStyle: { color: '#2a2a4a' } },
+      axisTick: { show: false },
+      axisLabel: { color: '#666', fontSize: 10, interval: Math.floor(bins / 6) },
+      name: 'ms',
+      nameTextStyle: { color: '#444', fontSize: 10 },
+      nameLocation: 'end'
+    },
+    yAxis: {
+      type: 'value',
+      splitLine: { lineStyle: { color: '#1e1e3a', type: 'dashed' } },
+      axisLine: { show: false },
+      axisTick: { show: false },
+      axisLabel: { color: '#888', fontSize: 10 }
+    },
+    series: [{
+      type: 'bar',
+      data: histogram,
+      barWidth: '80%',
+      itemStyle: {
+        color: {
+          type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
+          colorStops: [
+            { offset: 0, color: 'rgba(233,69,96,0.6)' },
+            { offset: 1, color: 'rgba(233,69,96,0.2)' }
+          ]
+        },
+        borderRadius: [2, 2, 0, 0]
+      },
+      emphasis: {
+        itemStyle: { color: 'rgba(233,69,96,0.8)' }
+      }
+    }],
+    animation: false
+  }
+}
+
 function buildFuncChartOption(history) {
   if (!history.length) {
     return {
@@ -724,27 +1054,116 @@ function buildFuncChartOption(history) {
   }
 }
 
+// ─────────────────────────────────────────────
+// Keyboard Shortcuts
+// ─────────────────────────────────────────────
+
+function handleKeyDown(e) {
+  // Ignore if user is typing in an input
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return
+  
+  if (e.key === ' ') {
+    e.preventDefault()
+    toggleSimulation()
+    showToast(simulationOn.value ? 'Simulation started' : 'Simulation stopped', 'info')
+  } else if (e.key === 'Escape') {
+    if (showSettingsModal.value) closeSettings()
+    else if (showAttachModal.value) closeAttachModal()
+  } else if (e.key.toLowerCase() === 's') {
+    if (!showAttachModal.value && !showSettingsModal.value) {
+      openSettings()
+    }
+  } else if (e.key.toLowerCase() === 'a') {
+    if (!showAttachModal.value && !showSettingsModal.value) {
+      openAttachModal()
+    }
+  }
+}
+
+// ─────────────────────────────────────────────
+// Toast Notifications
+// ─────────────────────────────────────────────
+
+function showToast(message, type = 'info') {
+  const id = toastIdCounter++
+  toasts.value.push({ id, message, type, timestamp: Date.now() })
+  // Auto-remove after 3 seconds
+  setTimeout(() => {
+    const idx = toasts.value.findIndex(t => t.id === id)
+    if (idx !== -1) toasts.value.splice(idx, 1)
+  }, 3000)
+}
+
+function toastIcon(type) {
+  if (type === 'success') return '✓'
+  if (type === 'error') return '✕'
+  if (type === 'warning') return '⚠'
+  return 'ℹ'
+}
+
+// ─────────────────────────────────────────────
+// Settings
+// ─────────────────────────────────────────────
+
+function openSettings() {
+  showSettingsModal.value = true
+}
+
+function closeSettings() {
+  showSettingsModal.value = false
+}
+
+function applySettings() {
+  // Trim history if needed
+  const maxLen = settings.value.chartHistoryLength
+  while (fpsHistory.value.length > maxLen) fpsHistory.value.shift()
+  while (memoryHistory.value.length > maxLen) memoryHistory.value.shift()
+  showToast('Settings saved', 'success')
+}
+
+function resetSettings() {
+  settings.value = {
+    targetFps: 60,
+    fpsWarningThreshold: 45,
+    fpsCriticalThreshold: 30,
+    memoryWarningMB: 1024,
+    memoryCriticalMB: 2048,
+    chartHistoryLength: 120,
+    showGauge: true,
+    showHistogram: true
+  }
+  showToast('Settings reset to defaults', 'info')
+}
+
 onMounted(() => {
   fpsChart = echarts.init(fpsChartRef.value)
   memoryChart = echarts.init(memoryChartRef.value)
   funcChart = echarts.init(funcChartRef.value)
+  gaugeChart = echarts.init(gaugeChartRef.value)
+  histChart = echarts.init(histChartRef.value)
   window.addEventListener('resize', handleResize)
+  window.addEventListener('keydown', handleKeyDown)
   connectWebSocket()
 })
 
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
+  window.removeEventListener('keydown', handleKeyDown)
   if (reconnectTimer) clearTimeout(reconnectTimer)
   if (ws) ws.close()
   if (fpsChart) fpsChart.dispose()
   if (memoryChart) memoryChart.dispose()
   if (funcChart) funcChart.dispose()
+  if (gaugeChart) gaugeChart.dispose()
+  if (histChart) histChart.dispose()
 })
 
 function handleResize() {
   if (fpsChart) fpsChart.resize()
   if (memoryChart) memoryChart.resize()
   if (funcChart) funcChart.resize()
+  if (gaugeChart) gaugeChart.resize()
+  if (histChart) histChart.resize()
 }
 
 function connectWebSocket() {
@@ -802,8 +1221,9 @@ function updateData(data) {
   fpsHistory.value.push(fpsVal)
   memoryHistory.value.push(memVal)
 
-  if (fpsHistory.value.length > maxDataPoints) fpsHistory.value.shift()
-  if (memoryHistory.value.length > maxDataPoints) memoryHistory.value.shift()
+  const maxLen = settings.value.chartHistoryLength
+  if (fpsHistory.value.length > maxLen) fpsHistory.value.shift()
+  if (memoryHistory.value.length > maxLen) memoryHistory.value.shift()
 
   // Recalculate stats from history
   if (fpsHistory.value.length > 0) {
@@ -841,6 +1261,13 @@ function updateData(data) {
   }
   if (funcChart && funcHistory.value.length > 0) {
     funcChart.setOption(buildFuncChartOption(funcHistory.value))
+  }
+  // Update gauge and histogram charts
+  if (gaugeChart && settings.value.showGauge) {
+    gaugeChart.setOption(buildGaugeOption(performanceScore.value))
+  }
+  if (histChart && settings.value.showHistogram && fpsHistory.value.length >= 10) {
+    histChart.setOption(buildHistogramOption(fpsHistory.value, histogramBinCount))
   }
 }
 
@@ -957,8 +1384,10 @@ async function doAttachProcess() {
     const data = await res.json()
     if (data.status) attachStatus.value = data.status
     closeAttachModal()
+    showToast(`Attached to ${selectedProcessName.value || 'PID ' + selectedPid.value}`, 'success')
   } catch (e) {
     console.error('Attach failed:', e)
+    showToast('Failed to attach to process', 'error')
   } finally {
     attaching.value = false
   }
@@ -968,7 +1397,10 @@ async function doDetachProcess() {
   try {
     await fetch('http://localhost:8080/api/detach', { method: 'POST' })
     attachStatus.value = { mode: 'none', pid: null, processName: '' }
-  } catch {}
+    showToast('Detached from process', 'info')
+  } catch {
+    showToast('Failed to detach', 'error')
+  }
 }
 
 async function doStartNamedPipe() {
@@ -977,7 +1409,10 @@ async function doStartNamedPipe() {
     const data = await res.json()
     if (data.status) attachStatus.value = data.status
     pipeInfo.value = data.pipeInfo || null
-  } catch {}
+    showToast('Named pipe server started', 'success')
+  } catch {
+    showToast('Failed to start named pipe', 'error')
+  }
 }
 
 async function doStopNamedPipe() {
@@ -985,7 +1420,10 @@ async function doStopNamedPipe() {
     await fetch('http://localhost:8080/api/named-pipe/stop', { method: 'POST' })
     attachStatus.value = { mode: 'none', pid: null, processName: '' }
     pipeInfo.value = null
-  } catch {}
+    showToast('Named pipe server stopped', 'info')
+  } catch {
+    showToast('Failed to stop named pipe', 'error')
+  }
 }
 
 async function doAttachCustomPath() {
@@ -1933,5 +2371,241 @@ body {
   .dashboard { padding: 16px; }
   .func-stats-grid { grid-template-columns: 1fr 1fr; }
   .frame-total-row { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* Settings Button */
+.settings-btn {
+  width: 32px; height: 32px; border-radius: 8px;
+  border: 1px solid #2a2a5a; background: #1a1a35;
+  color: #888; font-size: 16px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.2s;
+}
+.settings-btn:hover { background: #222245; color: #ddd; border-color: #3a3a7a; }
+
+/* Toast Notifications */
+.toast-container {
+  position: fixed; top: 72px; right: 28px; z-index: 1000;
+  display: flex; flex-direction: column; gap: 8px; pointer-events: none;
+}
+
+.toast {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 18px; border-radius: 10px;
+  font-size: 13px; font-weight: 500;
+  backdrop-filter: blur(8px);
+  animation: slideInRight 0.3s ease;
+  pointer-events: auto;
+}
+
+.toast.toast-success { background: rgba(0,230,118,0.15); border: 1px solid rgba(0,230,118,0.3); color: #00e676; }
+.toast.toast-error { background: rgba(239,83,80,0.15); border: 1px solid rgba(239,83,80,0.3); color: #ef5350; }
+.toast.toast-warning { background: rgba(255,202,40,0.15); border: 1px solid rgba(255,202,40,0.3); color: #ffca28; }
+.toast.toast-info { background: rgba(79,195,247,0.15); border: 1px solid rgba(79,195,247,0.3); color: #4fc3f7; }
+
+.toast-icon { font-size: 14px; font-weight: 700; }
+.toast-msg { line-height: 1.3; }
+
+.toast-fade-enter-active { animation: slideInRight 0.3s ease; }
+.toast-fade-leave-active { animation: slideOutRight 0.2s ease; }
+
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(30px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes slideOutRight {
+  from { opacity: 1; transform: translateX(0); }
+  to { opacity: 0; transform: translateX(30px); }
+}
+
+/* Settings Modal */
+.settings-dialog { width: 520px; }
+
+.settings-body {
+  padding: 16px 24px;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.settings-section {
+  margin-bottom: 20px;
+}
+
+.settings-section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #c0c0d0;
+  margin-bottom: 12px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #1e1e3f;
+}
+
+.settings-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.settings-label {
+  font-size: 13px;
+  color: #888;
+}
+
+.settings-select {
+  background: #0d0d1a;
+  border: 1px solid #2a2a5a;
+  border-radius: 6px;
+  padding: 6px 12px;
+  color: #e0e0e0;
+  font-size: 13px;
+  outline: none;
+  cursor: pointer;
+  min-width: 120px;
+}
+.settings-select:focus { border-color: rgba(105,240,174,0.4); }
+
+.settings-slider-row {
+  display: flex; align-items: center; gap: 12px;
+}
+
+.settings-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 140px;
+  height: 4px;
+  background: #2a2a5a;
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+.settings-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: #69f0ae;
+  cursor: pointer;
+  transition: transform 0.15s;
+}
+.settings-slider::-webkit-slider-thumb:hover { transform: scale(1.15); }
+
+.settings-slider-val {
+  font-size: 12px;
+  color: #69f0ae;
+  font-weight: 600;
+  min-width: 70px;
+  text-align: right;
+}
+
+/* Toggle Switch */
+.settings-toggle {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+  cursor: pointer;
+}
+
+.settings-toggle input {
+  opacity: 0; width: 0; height: 0;
+}
+
+.settings-toggle-slider {
+  position: absolute;
+  inset: 0;
+  background: #2a2a5a;
+  border-radius: 12px;
+  transition: all 0.2s;
+}
+
+.settings-toggle-slider::before {
+  content: '';
+  position: absolute;
+  width: 18px; height: 18px;
+  left: 3px; top: 3px;
+  background: #555;
+  border-radius: 50%;
+  transition: all 0.2s;
+}
+
+.settings-toggle input:checked + .settings-toggle-slider {
+  background: rgba(105,240,174,0.25);
+}
+
+.settings-toggle input:checked + .settings-toggle-slider::before {
+  transform: translateX(20px);
+  background: #69f0ae;
+}
+
+/* Shortcuts Grid */
+.shortcuts-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.shortcut-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: #888;
+}
+
+.shortcut-item kbd {
+  display: inline-block;
+  padding: 3px 8px;
+  background: #1a1a35;
+  border: 1px solid #2a2a5a;
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 11px;
+  color: #c0c0d0;
+  min-width: 28px;
+  text-align: center;
+}
+
+.settings-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 12px 24px;
+  border-top: 1px solid #1e1e3f;
+}
+
+/* Gauge + Histogram Row */
+.gauge-hist-row {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.gauge-card, .hist-card {
+  background: #13132b;
+  border: 1px solid #1e1e3f;
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.gauge-area {
+  width: 100%;
+  height: 180px;
+}
+
+.hist-area {
+  width: 100%;
+  height: 180px;
+}
+
+.chart-range.excellent { color: #00e676; }
+.chart-range.good { color: #69f0ae; }
+.chart-range.fair { color: #ffca28; }
+.chart-range.poor { color: #ff7043; }
+.chart-range.critical { color: #ef5350; }
+
+/* Responsive for gauge/histogram */
+@media (max-width: 900px) {
+  .gauge-hist-row { grid-template-columns: 1fr; }
 }
 </style>

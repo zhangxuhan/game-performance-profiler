@@ -11,6 +11,7 @@ namespace ProfilerCore {
     class StatisticsAnalyzer;
     class AlertManager;
     class GPUProfiler;
+    class MemoryAnalyzer;
     struct AlertThresholds;
 }
 
@@ -86,6 +87,16 @@ public:
     void RecordCPUGPUFrame(double cpuTimeMs, double gpuTimeUs);
     std::string GetCurrentBottleneck() const;
     
+    // Memory analysis
+    MemoryAnalyzer* GetMemoryAnalyzer() { return m_memoryAnalyzer.get(); }
+    int64_t TrackMemoryAllocation(size_t size, enum MemoryCategory category = MemoryCategory::General,
+                                   const std::string& tag = "",
+                                   const char* file = nullptr, int line = 0);
+    void TrackMemoryDeallocation(int64_t allocationId);
+    struct MemoryReport GetMemoryReport() const;
+    std::vector<struct MemoryLeak> GetDetectedLeaks() const;
+    size_t GetCurrentMemoryUsage() const;
+    
     // Data export
     std::string ExportToJSON() const;
     std::string ExportToCSV() const;
@@ -120,6 +131,7 @@ private:
     std::unique_ptr<AlertManager> m_alertManager;
     std::unique_ptr<GPUProfiler> m_gpuProfiler;
     bool m_gpuProfilerEnabled = true;
+    std::unique_ptr<MemoryAnalyzer> m_memoryAnalyzer;
     
     struct FunctionStackEntry {
         std::string name;
@@ -130,9 +142,21 @@ private:
 
 } // namespace ProfilerCore
 
+#include "MemoryAnalyzer.h"
+
 // Macros for easy profiling
 #define PROFILE_FUNCTION() \
     static ProfilerCore::FunctionProfile __profile__##__LINE__(__FUNCTION__)
 
 #define PROFILE_SCOPE(name) \
     static ProfilerCore::ScopeProfile __scope__##__LINE__(name)
+
+// Memory tracking macros
+#define TRACK_MEMORY(size, category, tag) \
+    ProfilerCore::ProfilerCore::GetInstance().TrackMemoryAllocation(size, category, tag, __FILE__, __LINE__)
+
+#define TRACK_MEMORY_SIMPLE(size) \
+    ProfilerCore::ProfilerCore::GetInstance().TrackMemoryAllocation(size, ProfilerCore::MemoryCategory::General, "", __FILE__, __LINE__)
+
+#define FREE_MEMORY(id) \
+    ProfilerCore::ProfilerCore::GetInstance().TrackMemoryDeallocation(id)

@@ -2,6 +2,7 @@
 #include "StatisticsAnalyzer.h"
 #include "AlertManager.h"
 #include "GPUProfiler.h"
+#include "MemoryAnalyzer.h"
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -24,10 +25,31 @@ ProfilerCore::ProfilerCore() {
     m_alertManager = std::make_unique<AlertManager>();
     m_gpuProfiler = std::make_unique<GPUProfiler>();
     m_gpuProfilerEnabled = true;
+    m_memoryAnalyzer = std::make_unique<MemoryAnalyzer>();
     
     // Wire alert manager to analyzer output
     m_alertManager->SetOnAlertGenerated([](const Alert& alert) {
         std::cout << "[Profiler Alert] " << alert.message << std::endl;
+    });
+    
+    // Wire memory analyzer leak detection
+    m_memoryAnalyzer->SetLeakCallback([](const MemoryLeak& leak) {
+        std::cout << "[Memory Leak] " << leak.size << " bytes in category '"
+                  << (leak.tag.empty() ? "untagged" : leak.tag) << "' (age: " 
+                  << static_cast<int>(leak.ageMs / 1000.0) << "s)" << std::endl;
+    });
+    
+    // Wire memory pressure callback
+    m_memoryAnalyzer->SetPressureCallback([](MemoryPressure pressure) {
+        const char* level = "None";
+        switch (pressure) {
+            case MemoryPressure::Low: level = "Low"; break;
+            case MemoryPressure::Medium: level = "Medium"; break;
+            case MemoryPressure::High: level = "High"; break;
+            case MemoryPressure::Critical: level = "Critical"; break;
+            default: break;
+        }
+        std::cout << "[Memory Pressure] Level: " << level << std::endl;
     });
 }
 
@@ -61,6 +83,11 @@ void ProfilerCore::BeginFrame() {
         std::chrono::high_resolution_clock::now().time_since_epoch()
     ).count();
     m_currentProfiles.clear();
+    
+    // Notify memory analyzer of frame start
+    if (m_memoryAnalyzer) {
+        m_memoryAnalyzer->BeginFrame(m_currentFrame);
+    }
 }
 
 void ProfilerCore::EndFrame() {
@@ -110,6 +137,11 @@ void ProfilerCore::EndFrame() {
     // Update GPU profiler with CPU frame time for correlation
     if (m_gpuProfiler && m_gpuProfilerEnabled) {
         m_gpuProfiler->RecordCPUGPUCorrelation(frameTimeMs, frameDuration);
+    }
+    
+    // Feed data to memory analyzer for frame-based tracking
+    if (m_memoryAnalyzer) {
+        m_memoryAnalyzer->EndFrame();
     }
     
     // Send data to server if callback is set
@@ -242,6 +274,11 @@ std::string ProfilerCore::ExportToJSON() const {
         ss << ",\"gpu\":" << m_gpuProfiler->ExportToJSON();
     }
     
+    // Append memory analysis if available
+    if (m_memoryAnalyzer) {
+        ss << ",\"memory\":" << m_memoryAnalyzer->ExportToJSON();
+    }
+    
     ss << "}";
     return ss.str();
 }
@@ -312,6 +349,44 @@ std::string ProfilerCore::GetCurrentBottleneck() const {
         return m_gpuProfiler->GetCurrentBottleneck();
     }
     return "Unknown";
+}
+
+// ─── Memory Analysis Integration ─────────────────────────────────────────────
+
+int64_t ProfilerCore::TrackMemoryAllocation(size_t size, MemoryCategory category,
+                                             const std::string& tag,
+                                             const char* file, int line) {
+    if (m_memoryAnalyzer) {
+        return m_memoryAnalyzer->TrackAllocation(size, category, tag, file, line);
+    }
+    return 0;
+}
+
+void ProfilerCore::TrackMemoryDeallocation(int64_t allocationId) {
+    if (m_memoryAnalyzer) {
+        m_memoryAnalyzer->TrackDeallocation(allocationId);
+    }
+}
+
+MemoryReport ProfilerCore::GetMemoryReport() const {
+    if (m_memoryAnalyzer) {
+        return m_memoryAnalyzer->GenerateReport();
+    }
+    return MemoryReport();
+}
+
+std::vector<MemoryLeak> ProfilerCore::GetDetectedLeaks() const {
+    if (m_memoryAnalyzer) {
+        return m_memoryAnalyzer->DetectLeaks();
+    }
+    return std::vector<MemoryLeak>();
+}
+
+size_t ProfilerCore::GetCurrentMemoryUsage() const {
+    if (m_memoryAnalyzer) {
+        return m_memoryAnalyzer->GetCurrentUsage();
+    }
+    return 0;
 }
 
 } // namespace ProfilerCore

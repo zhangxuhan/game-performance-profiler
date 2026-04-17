@@ -85,6 +85,26 @@ Windows 游戏性能分析工具 — 开箱即用，无需配置。
 - VSync 等待过长
 - 疑似热降频
 
+### 内存分析系统
+
+实时内存追踪与泄漏检测，支持以下功能：
+
+| 功能 | 说明 |
+|------|------|
+| **分配追踪** | 按类别追踪内存分配（纹理、网格、音频等） |
+| **泄漏检测** | 自动检测长期未释放的内存分配 |
+| **趋势分析** | 内存增长趋势分析与 OOM 预测 |
+| **内存压力** | 实时监控内存压力级别 |
+| **分类统计** | 按资源类型统计内存使用 |
+| **预算管理** | 可配置的内存预算与告警 |
+
+内存类别：
+- Texture（纹理）· Mesh（网格）· Audio（音频）
+- Animation（动画）· Script（脚本）· Physics（物理）
+- Particle（粒子）· UI（界面）· GPU（显存）· General（通用）
+
+内存压力级别：None → Low → Medium → High → Critical
+
 ### FPS 状态颜色
 
 | 颜色 | 范围 | 含义 |
@@ -160,6 +180,30 @@ void onGPUFrame(double gpuTimeUs, double gpuBusyUs, int drawCalls, int triangles
 }
 ```
 
+### 使用内存分析 API
+
+```cpp
+#include "ProfilerCore.h"
+
+// 追踪内存分配
+int64_t textureAllocId = TRACK_MEMORY(textureSize, 
+    ProfilerCore::MemoryCategory::Texture, "PlayerTexture");
+
+// 追踪释放
+FREE_MEMORY(textureAllocId);
+
+// 获取内存报告
+auto report = ProfilerCore::ProfilerCore::GetInstance().GetMemoryReport();
+if (report.trend.hasLeak) {
+    std::cout << "Leak detected: " << report.trend.trendSummary << std::endl;
+}
+
+// 检查内存压力
+if (report.pressure >= ProfilerCore::MemoryPressure::High) {
+    // 触发内存优化逻辑
+}
+```
+
 ---
 
 ## 开发调试
@@ -184,7 +228,10 @@ game-performance-profiler/
     ├── StatisticsAnalyzer  # 统计分析（分位数、稳定性）
     ├── AlertManager        # 实时性能警报系统
     ├── BenchmarkRecorder   # 基准测试记录与对比
-    └── GPUProfiler         # GPU 性能分析（帧时间、显存、瓶颈检测）
+    ├── FrameTimeAnalyzer   # 帧时间深度分析与卡顿检测
+    ├── ProcessProfiler     # 进程级性能采样（Windows PDH）
+    ├── GPUProfiler         # GPU 性能分析（帧时间、显存、瓶颈检测）
+    └── MemoryAnalyzer      # 内存分析与泄漏检测
 ```
 
 ---

@@ -17,9 +17,30 @@ const fs = require('fs');
 const path = require('path');
 const multer = require('multer');
 
+// Resolve upload directory — must be writable in both dev and Electron (asar is read-only)
+function getUploadDir() {
+    // Electron environment: use userData (e.g. %APPDATA%\game-performance-profiler\uploads)
+    if (process.env.ELECTRON === 'true') {
+        try {
+            const { app } = require('electron');
+            const dir = path.join(app.getPath('userData'), 'uploads');
+            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+            return dir;
+        } catch (e) {
+            // fallback
+        }
+    }
+    // Dev / standalone: use project-relative uploads folder
+    const dir = path.join(__dirname, '..', 'uploads');
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    return dir;
+}
+
+const UPLOAD_DIR = getUploadDir();
+
 // Configure multer for file uploads
 const upload = multer({
-    dest: path.join(__dirname, '..', 'uploads'),
+    dest: UPLOAD_DIR,
     limits: { fileSize: 50 * 1024 * 1024 } // 50MB max
 });
 

@@ -1,0 +1,10 @@
+{"frame":1,"fps":60,"frameTime":16.67,"memory":52428800,"profiles":[{"name":"Update","duration":4000},{"name":"Render","duration":3000},{"name":"Physics","duration":1500}]}
+{"frame":2,"fps":58,"frameTime":17.24,"memory":52500000,"profiles":[{"name":"Update","duration":4200},{"name":"Render","duration":3100},{"name":"Physics","duration":1600}]}
+{"frame":3,"fps":62,"frameTime":16.13,"memory":52300000,"profiles":[{"name":"Update","duration":3900},{"name":"Render","duration":2900},{"name":"Physics","duration":1400}]}
+{"frame":4,"fps":55,"frameTime":18.18,"memory":52600000,"profiles":[{"name":"Update","duration":4500},{"name":"Render","duration":3500},{"name":"Physics","duration":1700}]}
+{"frame":5,"fps":60,"frameTime":16.67,"memory":52450000,"profiles":[{"name":"Update","duration":4100},{"name":"Render","duration":3000},{"name":"Physics","duration":1500}]}
+{"frame":6,"fps":59,"frameTime":16.95,"memory":52550000,"profiles":[{"name":"Update","duration":4000},{"name":"Render","duration":3200},{"name":"Physics","duration":1550}]}
+{"frame":7,"fps":61,"frameTime":16.39,"memory":52350000,"profiles":[{"name":"Update","duration":3800},{"name":"Render","duration":2950},{"name":"Physics","duration":1450}]}
+{"frame":8,"fps":57,"frameTime":17.54,"memory":52650000,"profiles":[{"name":"Update","duration":4300},{"name":"Render","duration":3300},{"name":"Physics","duration":1650}]}
+{"frame":9,"fps":60,"frameTime":16.67,"memory":52400000,"profiles":[{"name":"Update","duration":4000},{"name":"Render","duration":3000},{"name":"Physics","duration":1500}]}
+{"frame":10,"fps":63,"frameTime":15.87,"memory":52200000,"profiles":[{"name":"Update","duration":3700},{"name":"Render","duration":2800},{"name":"Physics","duration":1350}]}

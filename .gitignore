@@ -36,6 +36,8 @@ npm-debug.log*
 # Build artifacts
 dist/
 *.zip
+backend/app.asar
+backend/app.asar.unpacked/
 update-asar.ps1
 capture-*.ps1
 screenshot.ps1

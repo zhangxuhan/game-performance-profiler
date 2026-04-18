@@ -1,6 +1,6 @@
 {
   "name": "game-performance-profiler",
-  "version": "1.0.2",
+  "version": "1.0.4",
   "author": "Game Performance Profiler",
   "description": "Game Performance Profiler - Desktop Application",
   "main": "main.js",
@@ -30,13 +30,13 @@
     "win": {
       "target": [
         {
-          "target": "nsis",
+          "target": "portable",
           "arch": [
             "x64"
           ]
         }
       ],
-      "artifactName": "${productName}-${version}-Setup.${ext}"
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
     },
     "nsis": {
       "oneClick": false,

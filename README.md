@@ -1,28 +1,21 @@
 # Game Performance Profiler
 
+[中文](#中文) | [English](#english) | [日本語](#日本語)
+
+---
+
+<a name="中文"></a>
+## 中文
+
 Windows 游戏性能分析工具。
 
----
+### 快速开始
 
-## 快速开始
+1. **运行程序** - 下载 [Releases](https://github.com/zhangxuhan/game-performance-profiler/releases) 中的 `.zip`，解压后双击运行
+2. **Attach 进程** - 点击 **🎯 Attach to Process**，选择目标游戏进程，右侧面板自动显示实时数据
+3. **上传数据** - 点击 **📤 Upload .prof File** 可上传已保存的性能数据文件进行回放分析
 
-### 1. 运行程序
-
-下载 [Releases](https://github.com/zhangxuhan/game-performance-profiler/releases) 中的 `.zip`，解压后双击运行。
-
-### 2. Attach 进程
-
-启动后点击 **🎯 Attach to Process**，选择目标游戏进程。
-
-右侧面板将自动显示实时性能数据。
-
-### 3. 上传数据文件
-
-点击 **📤 Upload .prof File** 可上传已保存的性能数据文件进行回放分析。
-
----
-
-## 功能一览
+### 功能一览
 
 | 功能 | 说明 |
 |------|------|
@@ -33,53 +26,83 @@ Windows 游戏性能分析工具。
 | 性能警报 | 自动检测异常并提醒 |
 | 数据回放 | 上传 `.prof` 文件分析历史数据 |
 
----
+### 数据文件格式
 
-## 数据接入
-
-### Named Pipe 方式（推荐）
-
-游戏端连接 `\\.\pipe\GameProfilerStream` 推送数据：
-
-```cpp
-// 游戏代码示例
-WebSocket ws("ws://localhost:8081");
-ws.send(json{ {"fps", fps}, {"frameTime", ms}, {"memory", bytes} });
-```
-
-### Process Monitor 方式
-
-直接 Attach 到运行中的游戏进程，自动采样 CPU/内存。
-
----
-
-## 数据文件格式
-
-`.prof` 文件为 JSON 格式，每行一条帧记录：
+`.prof` 文件为 JSON Lines 格式，每行一条帧记录：
 
 ```json
-{"frame":1,"fps":60,"frameTime":16.67,"memory":52428800,"profiles":[...]}
-{"frame":2,"fps":58,"frameTime":17.24,"memory":52500000,"profiles":[...]}
-```
-
-上传后可在界面中回放分析。
-
----
-
-## 开发调试
-
-```bash
-cd backend && npm install && npm start
-cd frontend && npm install && npm run dev
+{"frame":1,"fps":60,"frameTime":16.67,"memory":52428800,"profiles":[{"name":"Update","duration":4.2},{"name":"Render","duration":3.1}]}
 ```
 
 ---
 
-## 技术栈
+<a name="english"></a>
+## English
+
+Windows game performance profiling tool.
+
+### Quick Start
+
+1. **Run** - Download `.zip` from [Releases](https://github.com/zhangxuhan/game-performance-profiler/releases), extract and run
+2. **Attach** - Click **🎯 Attach to Process**, select target game process, real-time data shows on the right panel
+3. **Upload** - Click **📤 Upload .prof File** to upload saved performance data for playback analysis
+
+### Features
+
+| Feature | Description |
+|---------|-------------|
+| FPS Monitor | Real-time framerate with color indicator |
+| Frame Time Distribution | Histogram showing frame time patterns |
+| Memory Tracking | Memory usage + leak detection |
+| Function Profiling | Per-frame function time breakdown |
+| Performance Alerts | Auto-detect anomalies and notify |
+| Data Playback | Upload `.prof` file to analyze historical data |
+
+### Data File Format
+
+`.prof` file uses JSON Lines format, one frame record per line:
+
+```json
+{"frame":1,"fps":60,"frameTime":16.67,"memory":52428800,"profiles":[{"name":"Update","duration":4.2},{"name":"Render","duration":3.1}]}
+```
+
+---
+
+<a name="日本語"></a>
+## 日本語
+
+Windows用ゲームパフォーマンス解析ツール。
+
+### クイックスタート
+
+1. **実行** - [Releases](https://github.com/zhangxuhan/game-performance-profiler/releases) から `.zip` をダウンロード、解凍して実行
+2. **アタッチ** - **🎯 Attach to Process** をクリック、対象のゲームプロセスを選択、右パネルにリアルタイムデータが表示されます
+3. **アップロード** - **📤 Upload .prof File** をクリックして、保存したパフォーマンスデータをアップロードして再生解析
+
+### 機能一覧
+
+| 機能 | 説明 |
+|------|------|
+| FPS監視 | リアルタイムフレームレート + 色表示 |
+| フレームタイム分布 | ヒストグラムでフレームタイムパターンを表示 |
+| メモリ追跡 | メモリ使用量 + リーク検出 |
+| 関数プロファイリング | フレームごとの関数時間内訳 |
+| パフォーマンスアラート | 異常を自動検出して通知 |
+| データ再生 | `.prof` ファイルをアップロードして履歴データを解析 |
+
+### データファイル形式
+
+`.prof` ファイルは JSON Lines 形式、1行に1フレームレコード：
+
+```json
+{"frame":1,"fps":60,"frameTime":16.67,"memory":52428800,"profiles":[{"name":"Update","duration":4.2},{"name":"Render","duration":3.1}]}
+```
+
+---
+
+## 技术栈 / Tech Stack / 技術スタック
 
 Vue 3 + ECharts 5 + Node.js + Electron 33
-
----
 
 ## License
 

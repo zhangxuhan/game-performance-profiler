@@ -432,63 +432,28 @@
     <div class="attach-screen" v-else>
       <div class="attach-content">
         <div class="attach-icon">🎮</div>
-        <div class="attach-title">Attach to a Process</div>
-        <div class="attach-sub">Select a game or application to start profiling</div>
+        <div class="attach-title">Game Performance Profiler</div>
+        <div class="attach-sub">选择一个游戏或应用程序开始性能分析</div>
+        
         <button class="attach-button-large" @click="openAttachModal">
-          🎯 Attach to Process
+          🎯 选择进程
         </button>
         
-        <!-- File Upload Section -->
-        <div class="upload-section">
-          <div class="upload-divider">
-            <span>or</span>
-          </div>
-          <div class="upload-title">📂 Upload Profiler Data File</div>
-          <div class="upload-sub">Load a saved .prof file to replay and analyze</div>
-          
-          <div class="upload-area" 
-               @click="triggerUpload"
-               @dragover.prevent="isDragging = true"
-               @dragleave.prevent="isDragging = false"
-               @drop.prevent="handleDropUpload">
-            <input type="file" 
-                   ref="fileInputRef"
-                   accept=".prof,.json,.jsonl"
-                   @change="handleFileSelect"
-                   hidden />
-            <div class="upload-icon" :class="{ 'upload-dragging': isDragging }">
-              📤
-            </div>
-            <div class="upload-text">
-              <span class="upload-main">Drop .prof file here or click to upload</span>
-              <span class="upload-hint">JSON format, max 50MB</span>
-            </div>
-          </div>
-          
-          <!-- Recent Uploads Info -->
-          <div class="upload-info" v-if="uploadedFileInfo.totalFrames > 0 && !isPlaybackActive">
-            <span class="upload-ready-badge">
-              ✅ {{ uploadedFileInfo.totalFrames }} frames loaded from {{ uploadedFileInfo.fileName }}
-            </span>
-            <button class="playback-start-btn" @click="startUploadedFilePlayback">
-              ▶ Start Playback
-            </button>
-          </div>
-          
-          <!-- Upload Progress -->
-          <div class="upload-progress" v-if="isUploading">
-            <div class="upload-progress-bar">
-              <div class="upload-progress-fill" :style="{ width: uploadProgress + '%' }"></div>
-            </div>
-            <span class="upload-progress-text">Uploading...</span>
-          </div>
-          
-          <!-- Upload Error -->
-          <div class="upload-error" v-if="uploadError">
-            <span class="upload-error-icon">⚠</span>
-            <span class="upload-error-text">{{ uploadError }}</span>
-            <button class="upload-error-dismiss" @click="uploadError = null">✕</button>
-          </div>
+        <div class="upload-divider"><span>或</span></div>
+        
+        <button class="attach-button-large attach-button-secondary" @click="triggerUpload">
+          📂 上传数据文件
+        </button>
+        <input type="file" ref="fileInputRef" accept=".prof,.json,.jsonl" @change="handleFileSelect" hidden />
+        
+        <!-- Upload Status (compact) -->
+        <div class="upload-status-compact" v-if="uploadedFileInfo.totalFrames > 0">
+          ✅ 已加载 {{ uploadedFileInfo.totalFrames }} 帧
+          <button class="playback-mini-btn" @click="startUploadedFilePlayback">▶ 播放</button>
+        </div>
+        <div class="upload-status-compact upload-status-error" v-if="uploadError">
+          ⚠️ {{ uploadError }}
+          <button class="dismiss-mini-btn" @click="uploadError = null">✕</button>
         </div>
       </div>
     </div>
@@ -584,7 +549,11 @@ const playbackSpeed = ref(1.0)
 
 // Computed: is currently attached to a process
 const isAttached = computed(() => {
-  return attachStatus.value.mode === 'process' && attachStatus.value.pid !== null
+  // Support both 'process' and 'process_monitor' modes from backend
+  const mode = attachStatus.value.mode
+  const result = (mode === 'process' || mode === 'process_monitor') && attachStatus.value.pid !== null
+  console.log('[isAttached]', { mode, pid: attachStatus.value.pid, result })
+  return result
 })
 
 // Computed: is playing uploaded file
@@ -1226,12 +1195,37 @@ function resetSettings() {
   showToast('Settings reset to defaults', 'info')
 }
 
+// Initialize ECharts instances (called when dashboard becomes visible)
+function initCharts() {
+  // Only init if refs are available (DOM elements exist)
+  if (fpsChartRef.value && !fpsChart) {
+    fpsChart = echarts.init(fpsChartRef.value)
+  }
+  if (memoryChartRef.value && !memoryChart) {
+    memoryChart = echarts.init(memoryChartRef.value)
+  }
+  if (funcChartRef.value && !funcChart) {
+    funcChart = echarts.init(funcChartRef.value)
+  }
+  if (gaugeChartRef.value && !gaugeChart) {
+    gaugeChart = echarts.init(gaugeChartRef.value)
+  }
+  if (histChartRef.value && !histChart) {
+    histChart = echarts.init(histChartRef.value)
+  }
+}
+
+// Watch isAttached to initialize charts when dashboard becomes visible
+watch(isAttached, (newVal) => {
+  if (newVal) {
+    nextTick(() => {
+      initCharts()
+      console.log('[Charts] Initialized after attach')
+    })
+  }
+})
+
 onMounted(() => {
-  fpsChart = echarts.init(fpsChartRef.value)
-  memoryChart = echarts.init(memoryChartRef.value)
-  funcChart = echarts.init(funcChartRef.value)
-  gaugeChart = echarts.init(gaugeChartRef.value)
-  histChart = echarts.init(histChartRef.value)
   window.addEventListener('resize', handleResize)
   window.addEventListener('keydown', handleKeyDown)
   connectWebSocket()
@@ -1259,23 +1253,27 @@ function handleResize() {
 
 function connectWebSocket() {
   const wsUrl = 'ws://localhost:8081'
+  console.log('[WS] Connecting to', wsUrl)
   ws = new WebSocket(wsUrl)
 
   ws.onopen = () => {
+    console.log('[WS] Connected!')
     connected.value = true
   }
 
   ws.onclose = () => {
+    console.log('[WS] Disconnected, reconnecting...')
     connected.value = false
     reconnectTimer = setTimeout(connectWebSocket, 2000)
   }
 
-  ws.onerror = () => {}
+  ws.onerror = (e) => { console.error('[WS] Error', e) }
 
   ws.onmessage = (event) => {
     try {
       const msg = JSON.parse(event.data)
       if (msg.type === 'frame_update' || msg.type === 'frame') {
+        console.log('[WS] frame_update fps=', msg.data?.fps, 'mem=', msg.data?.memory)
         updateData(msg.data)
       } else if (msg.type === 'simulation_status') {
         simulationOn.value = msg.running
@@ -1325,6 +1323,7 @@ function connectWebSocket() {
 }
 
 function updateData(data) {
+  console.log('[updateData] fps=', data.fps, 'mem=', data.memory, 'frame=', data.frame)
   fps.value = Math.round(data.fps || 0)
   frameTime.value = (data.frameTime || 0).toFixed(2)
   memory.value = Math.round((data.memory || 0) / 1024 / 1024)

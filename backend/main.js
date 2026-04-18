@@ -9,7 +9,9 @@ const path = require('path');
 const { startServer } = require('./src/server');
 
 let mainWindow = null;
-const isDev = process.env.NODE_ENV !== 'production';
+
+// Detect development mode: use app.isPackaged (most reliable)
+const isDev = !app.isPackaged;
 
 function getFrontendUrl() {
   if (isDev) {

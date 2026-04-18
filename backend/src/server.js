@@ -18,6 +18,9 @@ const path = require('path');
 const multer = require('multer');
 
 // Resolve upload directory — must be writable in both dev and Electron (asar is read-only)
+// Called lazily when routes are set up (after app ready in Electron)
+let upload = null;
+
 function getUploadDir() {
     // Electron environment: use userData (e.g. %APPDATA%\game-performance-profiler\uploads)
     if (process.env.ELECTRON === 'true') {
@@ -27,7 +30,8 @@ function getUploadDir() {
             if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
             return dir;
         } catch (e) {
-            // fallback
+            console.warn('[Server] Failed to get Electron userData path:', e.message);
+            // fallback to temp
         }
     }
     // Dev / standalone: use project-relative uploads folder
@@ -36,13 +40,17 @@ function getUploadDir() {
     return dir;
 }
 
-const UPLOAD_DIR = getUploadDir();
-
-// Configure multer for file uploads
-const upload = multer({
-    dest: UPLOAD_DIR,
-    limits: { fileSize: 50 * 1024 * 1024 } // 50MB max
-});
+function initUploadMiddleware() {
+    if (!upload) {
+        const uploadDir = getUploadDir();
+        console.log('[Server] Upload directory:', uploadDir);
+        upload = multer({
+            dest: uploadDir,
+            limits: { fileSize: 50 * 1024 * 1024 } // 50MB max
+        });
+    }
+    return upload;
+}
 
 const PORT = process.env.PORT || 8080;
 const WS_PORT = process.env.WS_PORT || 8081;
@@ -267,6 +275,9 @@ function broadcast(message) {
 
 // REST API endpoints
 function setupRoutes(app) {
+    // Initialize upload middleware lazily (after Electron app is ready)
+    initUploadMiddleware();
+    
     // Get latest frame data
     app.get('/api/frames/latest', (req, res) => {
         res.json(latestFrameData || { error: 'No data available' });
@@ -988,11 +999,15 @@ function startServer() {
     app.use(cors());
     app.use(express.json());
 
-    // Serve static files in production
+    // Setup API routes FIRST (before static files)
+    setupRoutes(app);
+
+    // Serve static files in production (after API routes)
     if (IS_PRODUCTION) {
         console.log('[Server] Production mode - serving frontend from:', FRONTEND_DIST);
         if (fs.existsSync(FRONTEND_DIST)) {
             app.use(express.static(FRONTEND_DIST));
+            // SPA fallback - only for non-API routes
             app.get('*', (req, res) => {
                 res.sendFile(path.join(FRONTEND_DIST, 'index.html'));
             });
@@ -1000,8 +1015,6 @@ function startServer() {
             console.log('[Server] Warning: frontend-dist not found at', FRONTEND_DIST);
         }
     }
-
-    setupRoutes(app);
 
     server = http.createServer(app);
     wsServer = http.createServer();

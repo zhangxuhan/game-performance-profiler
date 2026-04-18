@@ -145,13 +145,11 @@ function monitorProcess(pid, intervalMs, onMetrics) {
     }
 
     const stopInterval = setInterval(async () => {
-        // Check if process is still running
         try {
-            const metrics = await getProcessMetrics(pid);
-            const title = await getWindowTitle(pid);
-            onMetrics({ pid, ...metrics, windowTitle: title, timestamp: Date.now() });
+            // Single PowerShell command for both metrics + window title
+            const metrics = await getProcessMetricsAndTitle(pid);
+            onMetrics({ pid, ...metrics, timestamp: Date.now() });
         } catch {
-            // Process likely exited
             onMetrics({ pid, cpu: 0, memoryMB: 0, windowTitle: '', timestamp: Date.now(), exited: true });
         }
     }, intervalMs);
@@ -169,6 +167,29 @@ function monitorProcess(pid, intervalMs, onMetrics) {
 }
 
 /**
+ * Get CPU, memory, and window title for a single PID in one PowerShell call.
+ */
+function getProcessMetricsAndTitle(pid) {
+    return new Promise((resolve) => {
+        const cmd = `powershell -NoProfile -Command "try { $p = Get-Process -Id ${pid} -ErrorAction Stop; [PSCustomObject]@{cpu=[math]::Round($p.CPU,1); memoryMB=[math]::Round($p.WorkingSet64/1MB,1); windowTitle=$p.MainWindowTitle} | ConvertTo-Json -Compress } catch { '{\\"exited\\":true}' }"`;
+        exec(cmd, { timeout: 5000 }, (err, stdout) => {
+            if (err) { resolve({ cpu: 0, memoryMB: 0, windowTitle: '' }); return; }
+            try {
+                const obj = JSON.parse(stdout.trim());
+                if (obj.exited) { resolve({ cpu: 0, memoryMB: 0, windowTitle: '', exited: true }); return; }
+                resolve({
+                    cpu: obj.cpu || 0,
+                    memoryMB: obj.memoryMB || 0,
+                    windowTitle: obj.windowTitle || ''
+                });
+            } catch {
+                resolve({ cpu: 0, memoryMB: 0, windowTitle: '' });
+            }
+        });
+    });
+}
+
+/**
  * Stop monitoring all tracked processes.
  */
 function stopAllMonitoring() {
@@ -183,41 +204,50 @@ function stopAllMonitoring() {
  * Filter processes to show only game-like processes (with windows and significant memory).
  */
 async function listGameProcesses() {
-    const procs = await listProcesses();
+    // Single PowerShell command to get all process info at once (avoid 400+ child processes)
+    const psCmd = `powershell -NoProfile -Command "Get-Process | Where-Object { $_.MainWindowTitle -or $_.WorkingSet64 -gt 50MB } | Select-Object Id, ProcessName, @{N='MemMB';E={[math]::Round($_.WorkingSet64/1MB,1)}}, @{N='CPU';E={[math]::Round($_.CPU,1)}}, MainWindowTitle | ConvertTo-Json -Compress"`;
 
-    // Enrich with memory and window title
-    const enriched = await Promise.all(procs.slice(0, 200).map(async (p) => {
-        const [metrics, title] = await Promise.all([
-            getProcessMetrics(p.pid).catch(() => ({ cpu: 0, memoryMB: 0 })),
-            getWindowTitle(p.pid).catch(() => '')
-        ]);
-        return { ...p, ...metrics, windowTitle: title };
-    }));
+    return new Promise((resolve) => {
+        exec(psCmd, { timeout: 8000, maxBuffer: 5 * 1024 * 1024 }, (err, stdout) => {
+            if (err || !stdout.trim()) { resolve([]); return; }
 
-    // Filter: must have window title or significant memory (>50MB) or be a known game-related process
-    const knownGameKeywords = [
-        'game', 'unity', 'unreal', 'gaming', 'steam', 'epic', 'battle',
-        'client', 'render', 'engine', 'play', 'world', 'dota', 'csgo',
-        'valorant', 'lol', 'minecraft', 'roblox', 'client', 'renderer'
-    ];
+            try {
+                let procs = JSON.parse(stdout.trim());
+                if (!Array.isArray(procs)) procs = [procs]; // single result
 
-    return enriched.filter(p => {
-        const nameLower = p.name.toLowerCase();
-        const titleLower = p.windowTitle.toLowerCase();
-        const cmdLower = p.cmd.toLowerCase();
+                const knownGameKeywords = [
+                    'game', 'unity', 'unreal', 'gaming', 'steam', 'epic', 'battle',
+                    'client', 'render', 'engine', 'play', 'world', 'dota', 'csgo',
+                    'valorant', 'lol', 'minecraft', 'roblox', 'renderer'
+                ];
 
-        if (p.windowTitle && p.windowTitle.length > 2) return true;
-        if (p.memoryMB > 100) return true;
-        if (p.memoryMB > 50 && (p.cpu > 0 || nameLower.includes('game'))) return true;
+                const filtered = procs.filter(p => {
+                    const nameLower = (p.ProcessName || '').toLowerCase();
+                    const titleLower = (p.MainWindowTitle || '').toLowerCase();
 
-        for (const kw of knownGameKeywords) {
-            if (nameLower.includes(kw) || titleLower.includes(kw) || cmdLower.includes(kw)) {
-                return true;
+                    if (p.MainWindowTitle && p.MainWindowTitle.length > 2) return true;
+                    if (p.MemMB > 100) return true;
+                    if (p.MemMB > 50 && (p.CPU > 0 || nameLower.includes('game'))) return true;
+
+                    for (const kw of knownGameKeywords) {
+                        if (nameLower.includes(kw) || titleLower.includes(kw)) return true;
+                    }
+                    return false;
+                }).map(p => ({
+                    pid: p.Id,
+                    name: p.ProcessName,
+                    cmd: '',
+                    memoryMB: p.MemMB || 0,
+                    cpu: p.CPU || 0,
+                    windowTitle: p.MainWindowTitle || ''
+                })).sort((a, b) => b.memoryMB - a.memoryMB);
+
+                resolve(filtered);
+            } catch (e) {
+                resolve([]);
             }
-        }
-
-        return false;
-    }).sort((a, b) => b.memoryMB - a.memoryMB);
+        });
+    });
 }
 
 /**

@@ -1,208 +1,68 @@
-# 📊 Game Performance Profiler
+# Game Performance Profiler
 
-Windows 游戏性能分析工具 — 开箱即用，无需配置。
-
-> 下载 releases 中的 `.zip` 文件，解压后双击 `Game Performance Profiler.exe` 即可运行，自动生成模拟数据。
+Windows 游戏性能分析工具。
 
 ---
 
-## 使用步骤
+## 快速开始
 
-1. **下载** — 进入 [Releases](https://github.com/zhangxuhan/game-performance-profiler/releases) 页面，下载最新 `.zip`
-2. **解压** — 解压到任意目录
-3. **运行** — 双击 `Game Performance Profiler.exe`，自动显示实时数据
+### 1. 运行程序
+
+下载 [Releases](https://github.com/zhangxuhan/game-performance-profiler/releases) 中的 `.zip`，解压后双击运行。
+
+### 2. Attach 进程
+
+启动后点击 **🎯 Attach to Process**，选择目标游戏进程。
+
+右侧面板将自动显示实时性能数据。
+
+### 3. 上传数据文件
+
+点击 **📤 Upload .prof File** 可上传已保存的性能数据文件进行回放分析。
 
 ---
 
-## 功能说明
-
-### 仿真模式
-- 右上角 **Simulation** 开关控制数据来源
-- **ON**：使用内置模拟数据（默认），适合演示和测试
-- **OFF**：接收真实游戏通过 WebSocket 推送的数据
-
-### 数据指标
-
-| 指标 | 说明 |
-|------|------|
-| **FPS** | 实时帧率，颜色随数值变化 |
-| **Frame Time** | 单帧耗时（毫秒） |
-| **Memory** | 内存占用（MB） |
-| **Frames** | 总帧数 |
-| **Avg FPS** | 平均帧率 |
-| **P95 FPS** | P95 分位帧率（尾部性能） |
-| **Stability** | 稳定性评分（0-100%） |
-
-### 性能警报系统
-
-实时检测并提示性能异常，支持以下检测类型：
-
-| 警报类型 | 说明 |
-|----------|------|
-| **FPS Drop** | 帧率突然下降 |
-| **Frame Time Spike** | 单帧耗时异常 |
-| **Memory Leak** | 内存泄漏检测（持续增长） |
-| **High Memory** | 内存使用过高 |
-| **Stability Issue** | 帧率不稳定 |
-| **Thermal Throttling** | 持续低帧率（疑似降频） |
-
-警报级别：🔴 严重 · 🟡 警告 · ℹ️ 提示
-
-支持：一键确认、全部确认、去重过滤
-
-### GPU 性能分析
-
-新增 GPU Profiler 模块，提供完整的 GPU 性能分析能力：
-
-| 指标 | 说明 |
-|------|------|
-| **GPU Frame Time** | GPU 渲染帧时间（微秒） |
-| **GPU Utilization** | GPU 利用率（0-100%） |
-| **Draw Calls** | 每帧绘制调用次数 |
-| **Triangles** | 每帧渲染三角形数量 |
-| **Texture Memory** | GPU 纹理内存占用 |
-| **VRAM Usage** | 显存使用量和总量 |
-| **Driver Overhead** | CPU 在 GPU 驱动中的耗时 |
-| **VSync Wait** | 等待垂直同步的时间 |
-| **Shader Complexity** | 着色器复杂度评分 |
-| **Compute Load** | GPU 计算负载 |
-
-**CPU/GPU 瓶颈检测**：
-- 自动分析 CPU 和 GPU 的负载比例
-- 识别当前性能瓶颈（CPU/GPU/内存）
-- 计算瓶颈分数（0-100%）
-
-**GPU 性能评分**：
-- **Overall Score** - 综合 GPU 性能评分（0-100）
-- **Efficiency Score** - GPU 效率评分（考虑驱动开销和 VSync 等待）
-- **Thermal Score** - 热管理评分（检测降频）
-
-**GPU 警报类型**：
-- 高 GPU 帧时间
-- 低 GPU 利用率（CPU 瓶颈）
-- 显存压力过高
-- 驱动开销过大
-- VSync 等待过长
-- 疑似热降频
-
-### 内存分析系统
-
-实时内存追踪与泄漏检测，支持以下功能：
+## 功能一览
 
 | 功能 | 说明 |
 |------|------|
-| **分配追踪** | 按类别追踪内存分配（纹理、网格、音频等） |
-| **泄漏检测** | 自动检测长期未释放的内存分配 |
-| **趋势分析** | 内存增长趋势分析与 OOM 预测 |
-| **内存压力** | 实时监控内存压力级别 |
-| **分类统计** | 按资源类型统计内存使用 |
-| **预算管理** | 可配置的内存预算与告警 |
-
-内存类别：
-- Texture（纹理）· Mesh（网格）· Audio（音频）
-- Animation（动画）· Script（脚本）· Physics（物理）
-- Particle（粒子）· UI（界面）· GPU（显存）· General（通用）
-
-内存压力级别：None → Low → Medium → High → Critical
-
-### FPS 状态颜色
-
-| 颜色 | 范围 | 含义 |
-|------|------|------|
-| 🟢 绿 | ≥ 55 FPS | 流畅 |
-| 🟡 黄 | 45-54 FPS | 良好 |
-| 🟠 橙 | 30-44 FPS | 一般 |
-| 🔴 红 | < 30 FPS | 卡顿 |
-
-### UI 交互优化
-
-**设置面板**（点击右上角 ⚙️ 或按 `S` 键）：
-- 目标 FPS 配置（30/60/120/144/240）
-- FPS 警告/严重阈值
-- 内存警告/严重阈值
-- 图表历史长度
-- 性能仪表盘开关
-- 帧时间分布直方图开关
-
-**键盘快捷键**：
-
-| 快捷键 | 功能 |
-|--------|------|
-| `Space` | 切换模拟数据 |
-| `S` | 打开设置面板 |
-| `A` | 打开附加进程面板 |
-| `Esc` | 关闭弹窗 |
-
-**性能评分仪表盘**：
-- 综合 FPS 和稳定性计算评分（0-100）
-- 颜色指示：绿色(优秀) → 黄色(一般) → 红色(严重)
-
-**帧时间分布直方图**：
-- 显示帧时间的分布情况
-- 帮助识别帧时间异常模式
-- 理想情况下应呈正态分布
-
-**Toast 通知**：
-- 操作反馈（附加、分离、设置保存等）
-- 自动消失（3秒）
+| FPS 监控 | 实时帧率 + 颜色指示 |
+| 帧时间分布 | 直方图显示帧时间模式 |
+| 内存追踪 | 内存使用 + 泄漏检测 |
+| 函数耗时 | 每帧各函数时间分解 |
+| 性能警报 | 自动检测异常并提醒 |
+| 数据回放 | 上传 `.prof` 文件分析历史数据 |
 
 ---
 
-## 接入真实游戏数据
+## 数据接入
 
-在你的游戏代码中，通过 WebSocket 发送帧数据：
+### Named Pipe 方式（推荐）
+
+游戏端连接 `\\.\pipe\GameProfilerStream` 推送数据：
 
 ```cpp
+// 游戏代码示例
 WebSocket ws("ws://localhost:8081");
-
-void onFrame(float fps, float frameTime, size_t memoryBytes) {
-    json data = {
-        {"frame", frameCount++},
-        {"fps", fps},
-        {"frameTime", frameTime},
-        {"memory", memoryBytes}
-    };
-    ws.send(data.dump());
-}
-
-// GPU 性能数据推送（C++ 原生引擎）
-void onGPUFrame(double gpuTimeUs, double gpuBusyUs, int drawCalls, int triangles) {
-    using namespace ProfilerCore;
-    GPUProfiler* gpu = ProfilerCore::GetInstance().GetGPUProfiler();
-    
-    gpu->RecordGPUFrameTime(gpuTimeUs, gpuBusyUs, gpuTimeUs - gpuBusyUs);
-    gpu->RecordDrawCalls(drawCalls, triangles, drawCalls * 1000);
-    gpu->RecordMemoryUsage(textureMemBytes, vramUsedBytes, vramTotalBytes);
-    
-    // 获取瓶颈分析
-    std::string bottleneck = ProfilerCore::GetInstance().GetCurrentBottleneck();
-    std::cout << "Current bottleneck: " << bottleneck << std::endl;
-}
+ws.send(json{ {"fps", fps}, {"frameTime", ms}, {"memory", bytes} });
 ```
 
-### 使用内存分析 API
+### Process Monitor 方式
 
-```cpp
-#include "ProfilerCore.h"
+直接 Attach 到运行中的游戏进程，自动采样 CPU/内存。
 
-// 追踪内存分配
-int64_t textureAllocId = TRACK_MEMORY(textureSize, 
-    ProfilerCore::MemoryCategory::Texture, "PlayerTexture");
+---
 
-// 追踪释放
-FREE_MEMORY(textureAllocId);
+## 数据文件格式
 
-// 获取内存报告
-auto report = ProfilerCore::ProfilerCore::GetInstance().GetMemoryReport();
-if (report.trend.hasLeak) {
-    std::cout << "Leak detected: " << report.trend.trendSummary << std::endl;
-}
+`.prof` 文件为 JSON 格式，每行一条帧记录：
 
-// 检查内存压力
-if (report.pressure >= ProfilerCore::MemoryPressure::High) {
-    // 触发内存优化逻辑
-}
+```json
+{"frame":1,"fps":60,"frameTime":16.67,"memory":52428800,"profiles":[...]}
+{"frame":2,"fps":58,"frameTime":17.24,"memory":52500000,"profiles":[...]}
 ```
+
+上传后可在界面中回放分析。
 
 ---
 
@@ -215,213 +75,7 @@ cd frontend && npm install && npm run dev
 
 ---
 
-## 项目结构
-
-```
-game-performance-profiler/
-├── backend/           # Node.js 后端 + Electron
-│   ├── main.js        # Electron 主进程
-│   └── src/server.js  # WebSocket + REST API + Alert Engine
-├── frontend/          # Vue 3 可视化界面
-└── src/core/          # C++ 原生采样引擎（可选）
-    ├── ProfilerCore        # 帧采样与数据导出
-    ├── StatisticsAnalyzer  # 统计分析（分位数、稳定性）
-    ├── AlertManager        # 实时性能警报系统
-    ├── BenchmarkRecorder   # 基准测试记录与对比
-    ├── FrameTimeAnalyzer   # 帧时间深度分析与卡顿检测
-    ├── ProcessProfiler     # 进程级性能采样（Windows PDH）
-    ├── GPUProfiler         # GPU 性能分析（帧时间、显存、瓶颈检测）
-    └── MemoryAnalyzer      # 内存分析与泄漏检测
-```
-
----
-
 ## 技术栈
-
-Vue 3 + ECharts 5 + Node.js + Electron 33
-
----
-
-## License
-
-MIT
-
----
-
-# 📊 Game Performance Profiler (English)
-
-A Windows game performance analysis tool — ready to use, no configuration needed.
-
-> Download the `.zip` from Releases, extract, and double-click `Game Performance Profiler.exe` to run. Simulation data is generated automatically.
-
----
-
-## Quick Start
-
-1. **Download** — Go to [Releases](https://github.com/zhangxuhan/game-performance-profiler/releases) and download the latest `.zip`
-2. **Extract** — Unzip to any folder
-3. **Run** — Double-click `Game Performance Profiler.exe` to see real-time data
-
----
-
-## Features
-
-### Simulation Mode
-- **Simulation** toggle in top-right corner controls data source
-- **ON**：Built-in simulation data (default), great for demos and testing
-- **OFF**：Receive real game data via WebSocket
-
-### Metrics
-
-| Metric | Description |
-|--------|-------------|
-| **FPS** | Real-time frame rate, color-coded |
-| **Frame Time** | Per-frame time (ms) |
-| **Memory** | Memory usage (MB) |
-| **Frames** | Total frame count |
-| **Avg FPS** | Average FPS |
-| **P95 FPS** | 95th percentile FPS |
-| **Stability** | Stability score (0-100%) |
-
-### Performance Alert System
-
-Real-time detection and notification of performance anomalies:
-
-| Alert Type | Description |
-|------------|-------------|
-| **FPS Drop** | Sudden frame rate decrease |
-| **Frame Time Spike** | Abnormal single-frame time |
-| **Memory Leak** | Memory leak detection (sustained growth) |
-| **High Memory** | Excessive memory usage |
-| **Stability Issue** | Frame rate instability |
-| **Thermal Throttling** | Sustained low FPS (possible throttling) |
-
-Alert levels: 🔴 Critical · 🟡 Warning · ℹ️ Info
-
-Features: One-click acknowledge, acknowledge all, deduplication
-
-### FPS Color Coding
-
-| Color | Range | Status |
-|-------|-------|--------|
-| 🟢 Green | ≥ 55 FPS | Smooth |
-| 🟡 Yellow | 45-54 FPS | Good |
-| 🟠 Orange | 30-44 FPS | Fair |
-| 🔴 Red | < 30 FPS | Laggy |
-
----
-
-## Integrating Real Game Data
-
-Send frame data via WebSocket from your game:
-
-```cpp
-WebSocket ws("ws://localhost:8081");
-
-void onFrame(float fps, float frameTime, size_t memoryBytes) {
-    json data = {
-        {"frame", frameCount++},
-        {"fps", fps},
-        {"frameTime", frameTime},
-        {"memory", memoryBytes}
-    };
-    ws.send(data.dump());
-}
-```
-
----
-
-## Development
-
-```bash
-cd backend && npm install && npm start
-cd frontend && npm install && npm run dev
-```
-
----
-
-## Tech Stack
-
-Vue 3 + ECharts 5 + Node.js + Electron 33
-
----
-
-# 📊 ゲームパフォーマンスプロファイラー (日本語)
-
-Windows用ゲームパフォーマンス分析ツール — 設定不要で即座に使用可能。
-
-> Releasesから`.zip`をダウンロード、解凍後`Game Performance Profiler.exe`をダブルクリックするだけで起動。シミュレーションデータが自動生成されます。
-
----
-
-## 使い方
-
-1. **ダウンロード** — [Releases](https://github.com/zhangxuhan/game-performance-profiler/releases)ページで最新の`.zip`をダウンロード
-2. **解凍** — 任意のフォルダに解凍
-3. **実行** — `Game Performance Profiler.exe`をダブルクリック、リアルタイムデータが表示されます
-
----
-
-## 機能
-
-### シミュレーションモード
-- 右上の**Simulation**スイッチでデータソースを切り替え
-- **ON**：内蔵シミュレーションデータ（デフォルト）、デモやテストに最適
-- **OFF**：WebSocket経由でリアルゲームデータを受信
-
-### 指標
-
-| 指標 | 説明 |
-|------|------|
-| **FPS** | リアルタイムフレームレート、色で状態表示 |
-| **Frame Time** | フレーム時間（ミリ秒） |
-| **Memory** | メモリ使用量（MB） |
-| **Frames** | 総フレーム数 |
-| **Avg FPS** | 平均FPS |
-| **P95 FPS** | 95パーセンタイルFPS |
-| **Stability** | 安定性スコア（0-100%） |
-
-### FPSの色分け
-
-| 色 | 範囲 | 状態 |
-|----|------|------|
-| 🟢 緑 | ≥ 55 FPS | 快適 |
-| 🟡 黄 | 45-54 FPS | 良好 |
-| 🟠 橙 | 30-44 FPS | 普通 |
-| 🔴 赤 | < 30 FPS | カクつく |
-
----
-
-## 実ゲームデータの連携
-
-ゲームコードからWebSocketでフレームデータを送信：
-
-```cpp
-WebSocket ws("ws://localhost:8081");
-
-void onFrame(float fps, float frameTime, size_t memoryBytes) {
-    json data = {
-        {"frame", frameCount++},
-        {"fps", fps},
-        {"frameTime", frameTime},
-        {"memory", memoryBytes}
-    };
-    ws.send(data.dump());
-}
-```
-
----
-
-## 開発
-
-```bash
-cd backend && npm install && npm start
-cd frontend && npm install && npm run dev
-```
-
----
-
-## 技術スタック
 
 Vue 3 + ECharts 5 + Node.js + Electron 33
 

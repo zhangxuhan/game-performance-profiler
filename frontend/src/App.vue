@@ -11,6 +11,27 @@
           🎮 {{ attachStatus.processName || 'PID ' + attachStatus.pid }}
         </span>
         <button class="detach-btn" @click="doDetachProcess">Detach</button>
+        <button class="settings-btn" @click="openSettings">⚙️</button>
+      </div>
+    </div>
+
+    <!-- Header (playing uploaded file) -->
+    <div class="header header-upload" v-else-if="isPlayingUploadedFile">
+      <div class="header-left">
+        <span class="logo">📊</span>
+        <span class="title">Game Performance Profiler</span>
+        <span class="upload-badge">📂 {{ uploadedFileInfo.fileName }}</span>
+      </div>
+      <div class="header-right">
+        <span class="playback-progress">
+          {{ playbackCurrentFrame + 1 }}/{{ playbackTotalFrames }}
+        </span>
+        <div class="playback-controls">
+          <button class="playback-btn" @click="pausePlayback" v-if="isPlaybackActive">⏸</button>
+          <button class="playback-btn" @click="resumePlayback" v-else>▶</button>
+          <button class="playback-btn playback-stop" @click="stopUploadedPlayback">■</button>
+        </div>
+        <button class="settings-btn" @click="openSettings">⚙️</button>
       </div>
     </div>
 
@@ -19,6 +40,9 @@
       <div class="header-left">
         <span class="logo">📊</span>
         <span class="title">Game Performance Profiler</span>
+      </div>
+      <div class="header-right">
+        <button class="settings-btn" @click="openSettings">⚙️</button>
       </div>
     </div>
 
@@ -413,6 +437,59 @@
         <button class="attach-button-large" @click="openAttachModal">
           🎯 Attach to Process
         </button>
+        
+        <!-- File Upload Section -->
+        <div class="upload-section">
+          <div class="upload-divider">
+            <span>or</span>
+          </div>
+          <div class="upload-title">📂 Upload Profiler Data File</div>
+          <div class="upload-sub">Load a saved .prof file to replay and analyze</div>
+          
+          <div class="upload-area" 
+               @click="triggerUpload"
+               @dragover.prevent="isDragging = true"
+               @dragleave.prevent="isDragging = false"
+               @drop.prevent="handleDropUpload">
+            <input type="file" 
+                   ref="fileInputRef"
+                   accept=".prof,.json,.jsonl"
+                   @change="handleFileSelect"
+                   hidden />
+            <div class="upload-icon" :class="{ 'upload-dragging': isDragging }">
+              📤
+            </div>
+            <div class="upload-text">
+              <span class="upload-main">Drop .prof file here or click to upload</span>
+              <span class="upload-hint">JSON format, max 50MB</span>
+            </div>
+          </div>
+          
+          <!-- Recent Uploads Info -->
+          <div class="upload-info" v-if="uploadedFileInfo.totalFrames > 0 && !isPlaybackActive">
+            <span class="upload-ready-badge">
+              ✅ {{ uploadedFileInfo.totalFrames }} frames loaded from {{ uploadedFileInfo.fileName }}
+            </span>
+            <button class="playback-start-btn" @click="startUploadedFilePlayback">
+              ▶ Start Playback
+            </button>
+          </div>
+          
+          <!-- Upload Progress -->
+          <div class="upload-progress" v-if="isUploading">
+            <div class="upload-progress-bar">
+              <div class="upload-progress-fill" :style="{ width: uploadProgress + '%' }"></div>
+            </div>
+            <span class="upload-progress-text">Uploading...</span>
+          </div>
+          
+          <!-- Upload Error -->
+          <div class="upload-error" v-if="uploadError">
+            <span class="upload-error-icon">⚠</span>
+            <span class="upload-error-text">{{ uploadError }}</span>
+            <button class="upload-error-dismiss" @click="uploadError = null">✕</button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -493,9 +570,26 @@ const selectedProcessName = ref('')
 const attaching = ref(false)
 const customPath = ref('')
 
+// File upload state
+const fileInputRef = ref(null)
+const isDragging = ref(false)
+const isUploading = ref(false)
+const uploadProgress = ref(0)
+const uploadError = ref(null)
+const uploadedFileInfo = ref({ fileName: '', totalFrames: 0, firstFrame: null, lastFrame: null })
+const playbackTotalFrames = ref(0)
+const playbackCurrentFrame = ref(0)
+const isPlaybackActive = ref(false)
+const playbackSpeed = ref(1.0)
+
 // Computed: is currently attached to a process
 const isAttached = computed(() => {
   return attachStatus.value.mode === 'process' && attachStatus.value.pid !== null
+})
+
+// Computed: is playing uploaded file
+const isPlayingUploadedFile = computed(() => {
+  return uploadedFileInfo.value.totalFrames > 0
 })
 
 let fpsChart = null
@@ -1201,6 +1295,30 @@ function connectWebSocket() {
       } else if (msg.type === 'attach_process_exited') {
         // Process exited, detach
         attachStatus.value = { mode: 'none', pid: null, processName: '' }
+      } else if (msg.type === 'upload_ready') {
+        // File upload completed on server
+        uploadedFileInfo.value = {
+          fileName: msg.data.fileName,
+          totalFrames: msg.data.totalFrames,
+          firstFrame: msg.data.firstFrame,
+          lastFrame: msg.data.lastFrame
+        }
+        playbackTotalFrames.value = msg.data.totalFrames
+      } else if (msg.type === 'playback_started') {
+        isPlaybackActive.value = true
+        playbackTotalFrames.value = msg.data.totalFrames
+      } else if (msg.type === 'playback_stopped' || msg.type === 'playback_complete') {
+        isPlaybackActive.value = false
+      } else if (msg.type === 'playback_paused') {
+        isPlaybackActive.value = false
+        playbackCurrentFrame.value = msg.data.frameIndex
+      } else if (msg.type === 'playback_seek') {
+        playbackCurrentFrame.value = msg.data.frameIndex
+      } else if (msg.type === 'upload_cleared') {
+        uploadedFileInfo.value = { fileName: '', totalFrames: 0, firstFrame: null, lastFrame: null }
+        playbackCurrentFrame.value = 0
+        playbackTotalFrames.value = 0
+        isPlaybackActive.value = false
       }
     } catch {}
   }
@@ -1211,6 +1329,11 @@ function updateData(data) {
   frameTime.value = (data.frameTime || 0).toFixed(2)
   memory.value = Math.round((data.memory || 0) / 1024 / 1024)
   frameCount.value = data.frame || 0
+
+  // Update playback frame index if this is from file replay
+  if (data._playbackIndex !== undefined) {
+    playbackCurrentFrame.value = data._playbackIndex
+  }
 
   const fpsVal = data.fps || 0
   const memVal = (data.memory || 0) / 1024 / 1024
@@ -1436,6 +1559,154 @@ async function doAttachCustomPath() {
     if (data.status) attachStatus.value = data.status
     closeAttachModal()
   } catch {}
+}
+
+// ─────────────────────────────────────────────
+// File Upload & Playback Functions
+// ─────────────────────────────────────────────
+
+function triggerUpload() {
+  if (fileInputRef.value) {
+    fileInputRef.value.click()
+  }
+}
+
+function handleFileSelect(event) {
+  const file = event.target.files[0]
+  if (file) {
+    uploadFile(file)
+  }
+  // Reset input so same file can be selected again
+  event.target.value = ''
+}
+
+function handleDropUpload(event) {
+  isDragging.value = false
+  const file = event.dataTransfer.files[0]
+  if (file) {
+    // Validate file type
+    const validExtensions = ['.prof', '.json', '.jsonl']
+    const fileName = file.name.toLowerCase()
+    const isValid = validExtensions.some(ext => fileName.endsWith(ext))
+    
+    if (!isValid) {
+      uploadError.value = 'Invalid file type. Please upload .prof, .json, or .jsonl files.'
+      return
+    }
+    
+    uploadFile(file)
+  }
+}
+
+async function uploadFile(file) {
+  isUploading.value = true
+  uploadProgress.value = 0
+  uploadError.value = null
+
+  try {
+    const formData = new FormData()
+    formData.append('file', file)
+
+    // Simulate progress (since fetch doesn't provide progress)
+    const progressInterval = setInterval(() => {
+      uploadProgress.value = Math.min(90, uploadProgress.value + 10)
+    }, 200)
+
+    const res = await fetch('http://localhost:8080/api/upload', {
+      method: 'POST',
+      body: formData
+    })
+
+    clearInterval(progressInterval)
+    uploadProgress.value = 100
+
+    const data = await res.json()
+
+    if (!res.ok) {
+      throw new Error(data.error || 'Upload failed')
+    }
+
+    // Upload successful
+    uploadedFileInfo.value = {
+      fileName: file.name,
+      totalFrames: data.totalFrames,
+      firstFrame: data.firstFrame,
+      lastFrame: data.lastFrame
+    }
+    playbackTotalFrames.value = data.totalFrames
+
+    showToast(`Loaded ${data.totalFrames} frames from ${file.name}`, 'success')
+
+    // Clear progress after success
+    setTimeout(() => {
+      isUploading.value = false
+      uploadProgress.value = 0
+    }, 500)
+
+  } catch (err) {
+    isUploading.value = false
+    uploadProgress.value = 0
+    uploadError.value = err.message
+    showToast('Upload failed: ' + err.message, 'error')
+  }
+}
+
+async function startUploadedFilePlayback() {
+  if (uploadedFileInfo.value.totalFrames === 0) {
+    showToast('No frames available for playback', 'error')
+    return
+  }
+
+  try {
+    const res = await fetch('http://localhost:8080/api/playback/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ speed: playbackSpeed.value })
+    })
+    const data = await res.json()
+
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to start playback')
+    }
+
+    isPlaybackActive.value = true
+    showToast(`Playback started at ${playbackSpeed.value}x speed`, 'success')
+
+  } catch (err) {
+    showToast('Failed to start playback: ' + err.message, 'error')
+  }
+}
+
+async function stopUploadedPlayback() {
+  try {
+    await fetch('http://localhost:8080/api/playback/stop', { method: 'POST' })
+    isPlaybackActive.value = false
+    uploadedFileInfo.value = { fileName: '', totalFrames: 0, firstFrame: null, lastFrame: null }
+    playbackCurrentFrame.value = 0
+    showToast('Playback stopped', 'info')
+  } catch {
+    showToast('Failed to stop playback', 'error')
+  }
+}
+
+async function pausePlayback() {
+  try {
+    await fetch('http://localhost:8080/api/playback/pause', { method: 'POST' })
+    isPlaybackActive.value = false
+    showToast('Playback paused', 'info')
+  } catch {
+    showToast('Failed to pause', 'error')
+  }
+}
+
+async function resumePlayback() {
+  try {
+    await fetch('http://localhost:8080/api/playback/resume', { method: 'POST' })
+    isPlaybackActive.value = true
+    showToast('Playback resumed', 'success')
+  } catch {
+    showToast('Failed to resume', 'error')
+  }
 }
 </script>
 
@@ -2728,5 +2999,234 @@ body {
 /* Responsive for gauge/histogram */
 @media (max-width: 900px) {
   .gauge-hist-row { grid-template-columns: 1fr; }
+}
+
+/* ─────────────────────────────────────────────
+   Upload Section Styles
+   ───────────────────────────────────────────── */
+
+.upload-section {
+  margin-top: 48px;
+  padding-top: 32px;
+}
+
+.upload-divider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 32px;
+}
+
+.upload-divider::before,
+.upload-divider::after {
+  content: '';
+  width: 80px;
+  height: 1px;
+  background: #e0e0e0;
+}
+
+.upload-divider span {
+  color: #999;
+  font-size: 14px;
+  padding: 0 16px;
+}
+
+.upload-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 8px;
+}
+
+.upload-sub {
+  font-size: 14px;
+  color: #666;
+  margin-bottom: 24px;
+}
+
+.upload-area {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 24px 32px;
+  border: 2px dashed #ccc;
+  border-radius: 12px;
+  background: #f8f9fa;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.upload-area:hover {
+  border-color: #667eea;
+  background: rgba(102, 126, 234, 0.05);
+}
+
+.upload-icon {
+  font-size: 40px;
+  transition: transform 0.2s;
+}
+
+.upload-icon.upload-dragging {
+  transform: scale(1.1);
+}
+
+.upload-area:hover .upload-icon {
+  transform: scale(1.05);
+}
+
+.upload-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.upload-main {
+  font-size: 15px;
+  color: #333;
+  font-weight: 500;
+}
+
+.upload-hint {
+  font-size: 13px;
+  color: #999;
+}
+
+.upload-info {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.upload-ready-badge {
+  background: rgba(0, 230, 118, 0.1);
+  color: #00e676;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.playback-start-btn {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  padding: 10px 24px;
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.playback-start-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+.upload-progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.upload-progress-bar {
+  width: 200px;
+  height: 6px;
+  background: #e0e0e0;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.upload-progress-fill {
+  height: 100%;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  transition: width 0.2s;
+}
+
+.upload-progress-text {
+  font-size: 13px;
+  color: #666;
+}
+
+.upload-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: rgba(239, 83, 80, 0.08);
+  border: 1px solid rgba(239, 83, 80, 0.2);
+  border-radius: 8px;
+  margin-top: 16px;
+}
+
+.upload-error-icon {
+  color: #ef5350;
+  font-size: 16px;
+}
+
+.upload-error-text {
+  color: #ef5350;
+  font-size: 13px;
+  flex: 1;
+}
+
+.upload-error-dismiss {
+  background: none;
+  border: none;
+  color: #ef5350;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+/* Header Upload Mode */
+.header-upload {
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.08) 0%, rgba(118, 75, 162, 0.08) 100%);
+}
+
+.upload-badge {
+  background: rgba(102, 126, 234, 0.15);
+  color: #667eea;
+  padding: 6px 14px;
+  border-radius: 16px;
+  font-size: 13px;
+  font-weight: 500;
+  margin-left: 12px;
+}
+
+.playback-progress {
+  color: #666;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.playback-controls {
+  display: flex;
+  gap: 8px;
+}
+
+.playback-btn {
+  background: #f0f0f0;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 16px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.playback-btn:hover {
+  background: #e8e8e8;
+  border-color: #ccc;
+}
+
+.playback-stop {
+  color: #ef5350;
+}
+
+.playback-stop:hover {
+  background: rgba(239, 83, 80, 0.1);
+  border-color: rgba(239, 83, 80, 0.3);
 }
 </style>

@@ -15,6 +15,13 @@ const cors = require('cors');
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const multer = require('multer');
+
+// Configure multer for file uploads
+const upload = multer({
+    dest: path.join(__dirname, '..', 'uploads'),
+    limits: { fileSize: 50 * 1024 * 1024 } // 50MB max
+});
 
 const PORT = process.env.PORT || 8080;
 const WS_PORT = process.env.WS_PORT || 8081;
@@ -36,6 +43,13 @@ const clients = new Set();
 let latestFrameData = null;
 let frameHistory = [];
 let memorySnapshots = [];
+
+// Uploaded file playback state
+let uploadedFrames = [];
+let playbackIndex = 0;
+let playbackTimer = null;
+let playbackSpeed = 1.0; // 1x speed by default
+let isPlayingUploaded = false;
 
 // Alert system state
 let alerts = [];
@@ -409,8 +423,181 @@ function setupRoutes(app) {
             uptime: process.uptime(),
             clients: clients.size,
             simulation: simulationRunning,
-            attachStatus: profilerAttacher.getStatus()
+            attachStatus: profilerAttacher.getStatus(),
+            uploadedFramesCount: uploadedFrames.length,
+            playbackActive: isPlayingUploaded
         });
+    });
+
+    // ─────────────────────────────────────────────
+    // File Upload & Playback API
+    // ─────────────────────────────────────────────
+
+    // Upload a .prof file for playback analysis
+    app.post('/api/upload', upload.single('file'), (req, res) => {
+        if (!req.file) {
+            res.status(400).json({ error: 'No file uploaded' });
+            return;
+        }
+
+        const filePath = req.file.path;
+        const originalName = req.file.originalname;
+
+        console.log(`[Upload] Received file: ${originalName} (${req.file.size} bytes)`);
+
+        // Parse the uploaded file (JSON lines format)
+        try {
+            const content = fs.readFileSync(filePath, 'utf8');
+            const lines = content.trim().split('\n');
+            const frames = [];
+
+            for (const line of lines) {
+                try {
+                    const frameData = JSON.parse(line);
+                    // Validate minimal structure
+                    if (frameData && (frameData.fps !== undefined || frameData.frame !== undefined)) {
+                        frames.push(frameData);
+                    }
+                } catch (parseErr) {
+                    // Skip malformed lines
+                    console.warn(`[Upload] Skipped malformed line: ${parseErr.message}`);
+                }
+            }
+
+            if (frames.length === 0) {
+                res.status(400).json({ error: 'No valid frame data found in file' });
+                return;
+            }
+
+            // Stop any existing playback
+            stopUploadedPlayback();
+
+            // Store frames for playback
+            uploadedFrames = frames;
+            playbackIndex = 0;
+            isPlayingUploaded = false;
+
+            // Broadcast upload ready status
+            broadcast({
+                type: 'upload_ready',
+                data: {
+                    fileName: originalName,
+                    totalFrames: frames.length,
+                    firstFrame: frames[0],
+                    lastFrame: frames[frames.length - 1]
+                }
+            });
+
+            // Clean up uploaded file (we parsed it into memory)
+            fs.unlinkSync(filePath);
+
+            res.json({
+                success: true,
+                fileName: originalName,
+                totalFrames: frames.length,
+                message: `Loaded ${frames.length} frames from ${originalName}`
+            });
+
+            console.log(`[Upload] Successfully loaded ${frames.length} frames`);
+
+        } catch (err) {
+            console.error(`[Upload] Error parsing file: ${err.message}`);
+            res.status(500).json({ error: 'Failed to parse uploaded file: ' + err.message });
+            fs.unlinkSync(filePath);
+        }
+    });
+
+    // Start playback of uploaded frames
+    app.post('/api/playback/start', (req, res) => {
+        if (uploadedFrames.length === 0) {
+            res.status(400).json({ error: 'No uploaded frames available' });
+            return;
+        }
+
+        const { speed = 1.0 } = req.body;
+        playbackSpeed = Math.max(0.1, Math.min(10, speed));
+
+        // Stop simulation/attach if active
+        if (simulationTimer) stopSimulation();
+        profilerAttacher.detachProcess();
+        profilerAttacher.stopNamedPipe();
+
+        startUploadedPlayback();
+
+        res.json({
+            success: true,
+            totalFrames: uploadedFrames.length,
+            speed: playbackSpeed,
+            message: 'Playback started'
+        });
+    });
+
+    // Stop playback
+    app.post('/api/playback/stop', (req, res) => {
+        stopUploadedPlayback();
+        res.json({ success: true, message: 'Playback stopped' });
+    });
+
+    // Pause playback
+    app.post('/api/playback/pause', (req, res) => {
+        if (playbackTimer) {
+            clearInterval(playbackTimer);
+            playbackTimer = null;
+            isPlayingUploaded = false;
+            broadcast({ type: 'playback_paused', data: { frameIndex: playbackIndex } });
+            res.json({ success: true, frameIndex: playbackIndex });
+        } else {
+            res.status(400).json({ error: 'Playback not active' });
+        }
+    });
+
+    // Resume playback
+    app.post('/api/playback/resume', (req, res) => {
+        if (uploadedFrames.length === 0) {
+            res.status(400).json({ error: 'No uploaded frames' });
+            return;
+        }
+        if (!playbackTimer) {
+            startUploadedPlayback();
+            res.json({ success: true });
+        } else {
+            res.status(400).json({ error: 'Playback already active' });
+        }
+    });
+
+    // Seek to specific frame
+    app.post('/api/playback/seek', (req, res) => {
+        const { frameIndex } = req.body;
+        if (uploadedFrames.length === 0) {
+            res.status(400).json({ error: 'No uploaded frames' });
+            return;
+        }
+        playbackIndex = Math.max(0, Math.min(uploadedFrames.length - 1, frameIndex || 0));
+        // Send frame at seek position
+        const frameData = uploadedFrames[playbackIndex];
+        handleProfilerData({ type: 'frame', data: frameData });
+        broadcast({ type: 'playback_seek', data: { frameIndex: playbackIndex, totalFrames: uploadedFrames.length } });
+        res.json({ success: true, frameIndex: playbackIndex });
+    });
+
+    // Get playback status
+    app.get('/api/playback/status', (req, res) => {
+        res.json({
+            hasUploadedFrames: uploadedFrames.length > 0,
+            totalFrames: uploadedFrames.length,
+            currentFrameIndex: playbackIndex,
+            isPlaying: isPlayingUploaded,
+            speed: playbackSpeed
+        });
+    });
+
+    // Clear uploaded frames
+    app.post('/api/upload/clear', (req, res) => {
+        stopUploadedPlayback();
+        uploadedFrames = [];
+        playbackIndex = 0;
+        broadcast({ type: 'upload_cleared' });
+        res.json({ success: true, message: 'Uploaded frames cleared' });
     });
 
     // Simulation control
@@ -698,6 +885,80 @@ function createAlert(type, severity, message, details, metric, value, threshold)
 function getActiveAlerts() {
     const cutoff = Date.now() - 30000;
     return alerts.filter(a => !a.acknowledged && a.timestamp > cutoff);
+}
+
+// ─────────────────────────────────────────────
+// Uploaded File Playback Functions
+// ─────────────────────────────────────────────
+
+/**
+ * Start playback of uploaded frames.
+ * Frames are replayed at their original timing (derived from frameTime field)
+ * or at a fixed interval if frameTime is not available.
+ */
+function startUploadedPlayback() {
+    if (playbackTimer) {
+        clearInterval(playbackTimer);
+    }
+
+    isPlayingUploaded = true;
+    console.log(`[Playback] Starting playback of ${uploadedFrames.length} frames at ${playbackSpeed}x speed`);
+
+    broadcast({
+        type: 'playback_started',
+        data: {
+            totalFrames: uploadedFrames.length,
+            speed: playbackSpeed,
+            mode: 'file_replay'
+        }
+    });
+
+    // Adaptive playback: use frameTime to determine interval
+    let lastFrameTime = null;
+
+    const playNextFrame = () => {
+        if (playbackIndex >= uploadedFrames.length) {
+            // Playback complete
+            stopUploadedPlayback();
+            broadcast({ type: 'playback_complete', data: { totalFrames: uploadedFrames.length } });
+            console.log('[Playback] Playback complete');
+            return;
+        }
+
+        const frameData = uploadedFrames[playbackIndex];
+
+        // Inject playback metadata
+        frameData._playbackIndex = playbackIndex;
+        frameData._source = 'file_replay';
+        frameData._originalFrameTime = frameData.frameTime;
+
+        handleProfilerData({ type: 'frame', data: frameData });
+
+        playbackIndex++;
+
+        // Calculate adaptive interval based on frameTime
+        const baseFrameTime = frameData.frameTime || 16.67; // default 60fps
+        const intervalMs = Math.max(10, baseFrameTime / playbackSpeed);
+
+        // Schedule next frame
+        playbackTimer = setTimeout(playNextFrame, intervalMs);
+    };
+
+    // Start playing immediately
+    playNextFrame();
+}
+
+/**
+ * Stop uploaded frame playback.
+ */
+function stopUploadedPlayback() {
+    if (playbackTimer) {
+        clearTimeout(playbackTimer);
+        playbackTimer = null;
+    }
+    isPlayingUploaded = false;
+    broadcast({ type: 'playback_stopped', data: { frameIndex: playbackIndex } });
+    console.log('[Playback] Playback stopped');
 }
 
 // Main server startup function

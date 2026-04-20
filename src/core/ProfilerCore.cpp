@@ -3,6 +3,7 @@
 #include "AlertManager.h"
 #include "GPUProfiler.h"
 #include "MemoryAnalyzer.h"
+#include "NetworkProfiler.h"
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -26,6 +27,7 @@ ProfilerCore::ProfilerCore() {
     m_gpuProfiler = std::make_unique<GPUProfiler>();
     m_gpuProfilerEnabled = true;
     m_memoryAnalyzer = std::make_unique<MemoryAnalyzer>();
+    m_networkProfiler = std::make_unique<NetworkProfiler>();
     
     // Wire alert manager to analyzer output
     m_alertManager->SetOnAlertGenerated([](const Alert& alert) {
@@ -336,6 +338,19 @@ void ProfilerCore::SetGPUProfilerEnabled(bool enabled) {
             m_gpuProfiler->Reset();
         }
     }
+}
+
+void ProfilerCore::SetNetworkProfilerEnabled(bool enabled) {
+    if (m_networkProfiler) {
+        m_networkProfiler->SetEnabled(enabled);
+    }
+}
+
+bool ProfilerCore::IsNetworkProfilerEnabled() const {
+    if (m_networkProfiler) {
+        return m_networkProfiler->IsEnabled();
+    }
+    return false;
 }
 
 void ProfilerCore::RecordCPUGPUFrame(double cpuTimeMs, double gpuTimeUs) {

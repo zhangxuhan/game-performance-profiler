@@ -12,6 +12,7 @@ namespace ProfilerCore {
     class AlertManager;
     class GPUProfiler;
     class MemoryAnalyzer;
+    class NetworkProfiler;
     class TrendPredictor;
     class PerformanceScorer;
     struct AlertThresholds;
@@ -84,11 +85,16 @@ public:
     GPUProfiler* GetGPUProfiler() { return m_gpuProfiler.get(); }
     void SetGPUProfilerEnabled(bool enabled);
     bool IsGPUProfilerEnabled() const { return m_gpuProfilerEnabled; }
-    
+
+    // Network Profiling
+    NetworkProfiler* GetNetworkProfiler() { return m_networkProfiler.get(); }
+    void SetNetworkProfilerEnabled(bool enabled);
+    bool IsNetworkProfilerEnabled() const;
+
     // Correlated CPU-GPU analysis
     void RecordCPUGPUFrame(double cpuTimeMs, double gpuTimeUs);
     std::string GetCurrentBottleneck() const;
-    
+
     // Memory analysis
     MemoryAnalyzer* GetMemoryAnalyzer() { return m_memoryAnalyzer.get(); }
     int64_t TrackMemoryAllocation(size_t size, enum MemoryCategory category = MemoryCategory::General,
@@ -140,6 +146,7 @@ private:
     std::unique_ptr<AlertManager> m_alertManager;
     std::unique_ptr<GPUProfiler> m_gpuProfiler;
     bool m_gpuProfilerEnabled = true;
+    std::unique_ptr<NetworkProfiler> m_networkProfiler;
     std::unique_ptr<MemoryAnalyzer> m_memoryAnalyzer;
     std::unique_ptr<TrendPredictor> m_trendPredictor;
     std::unique_ptr<PerformanceScorer> m_performanceScorer;

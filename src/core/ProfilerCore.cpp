@@ -3,6 +3,7 @@
 #include "AlertManager.h"
 #include "GPUProfiler.h"
 #include "MemoryAnalyzer.h"
+#include "NetworkProfiler.h"
 #include "TrendPredictor.h"
 #include "PerformanceScorer.h"
 #include <iostream>
@@ -27,6 +28,7 @@ ProfilerCore::ProfilerCore() {
     m_alertManager = std::make_unique<AlertManager>();
     m_gpuProfiler = std::make_unique<GPUProfiler>();
     m_gpuProfilerEnabled = true;
+    m_networkProfiler = std::make_unique<NetworkProfiler>();
     m_memoryAnalyzer = std::make_unique<MemoryAnalyzer>();
     m_trendPredictor = std::make_unique<TrendPredictor>();
     m_performanceScorer = std::make_unique<PerformanceScorer>();
@@ -283,6 +285,11 @@ std::string ProfilerCore::ExportToJSON() const {
         ss << ",\"memory\":" << m_memoryAnalyzer->ExportToJSON();
     }
     
+    // Append network profiling data if available
+    if (m_networkProfiler) {
+        ss << ",\"network\":" << m_networkProfiler->ExportToJSON();
+    }
+    
     ss << "}";
     return ss.str();
 }
@@ -313,8 +320,6 @@ void ProfilerCore::SetAlertConfig(const struct AlertConfig& config) {
 const std::vector<Alert>& ProfilerCore::GetActiveAlerts() const {
     static const std::vector<Alert> empty;
     if (!m_alertManager) return empty;
-    // Note: This returns a reference to internal state; in production,
-    // you'd return a copy. For performance, we use GetAlertManager() directly.
     return m_alertManager->GetAllAlerts();
 }
 
@@ -336,10 +341,22 @@ void ProfilerCore::SetGPUProfilerEnabled(bool enabled) {
     m_gpuProfilerEnabled = enabled;
     if (m_gpuProfiler) {
         if (enabled) {
-            // Reset GPU profiler when enabling
             m_gpuProfiler->Reset();
         }
     }
+}
+
+void ProfilerCore::SetNetworkProfilerEnabled(bool enabled) {
+    if (m_networkProfiler) {
+        m_networkProfiler->SetEnabled(enabled);
+    }
+}
+
+bool ProfilerCore::IsNetworkProfilerEnabled() const {
+    if (m_networkProfiler) {
+        return m_networkProfiler->IsEnabled();
+    }
+    return false;
 }
 
 void ProfilerCore::RecordCPUGPUFrame(double cpuTimeMs, double gpuTimeUs) {

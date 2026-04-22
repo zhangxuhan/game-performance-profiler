@@ -12,6 +12,8 @@ namespace ProfilerCore {
     class AlertManager;
     class GPUProfiler;
     class MemoryAnalyzer;
+    class TrendPredictor;
+    class PerformanceScorer;
     struct AlertThresholds;
 }
 
@@ -97,6 +99,13 @@ public:
     std::vector<struct MemoryLeak> GetDetectedLeaks() const;
     size_t GetCurrentMemoryUsage() const;
     
+    // Trend prediction
+    TrendPredictor* GetTrendPredictor() { return m_trendPredictor.get(); }
+    
+    // Performance scoring
+    PerformanceScorer* GetPerformanceScorer() { return m_performanceScorer.get(); }
+    struct PerformanceScoreCard ComputePerformanceScore();
+    
     // Data export
     std::string ExportToJSON() const;
     std::string ExportToCSV() const;
@@ -132,6 +141,8 @@ private:
     std::unique_ptr<GPUProfiler> m_gpuProfiler;
     bool m_gpuProfilerEnabled = true;
     std::unique_ptr<MemoryAnalyzer> m_memoryAnalyzer;
+    std::unique_ptr<TrendPredictor> m_trendPredictor;
+    std::unique_ptr<PerformanceScorer> m_performanceScorer;
     
     struct FunctionStackEntry {
         std::string name;

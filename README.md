@@ -25,6 +25,8 @@ Windows 游戏性能分析工具。
 | 函数耗时 | 每帧各函数时间分解 |
 | 性能警报 | 自动检测异常并提醒 |
 | 数据回放 | 上传 `.prof` 文件分析历史数据 |
+| **趋势预测** | 线性回归预测帧率下降 / 内存泄漏，预测未来帧数 |
+| **性能评分** | 综合评分 0-100，自动检测性能回归，趋势分析，生成优化建议 |
 
 ### 数据文件格式
 
@@ -57,6 +59,8 @@ Windows game performance profiling tool.
 | Function Profiling | Per-frame function time breakdown |
 | Performance Alerts | Auto-detect anomalies and notify |
 | Data Playback | Upload `.prof` file to analyze historical data |
+| **Trend Prediction** | Linear regression to predict FPS drops / memory leaks |
+| **Performance Scoring** | Overall score 0-100, regression detection, trend analysis, recommendations |
 
 ### Data File Format
 
@@ -89,6 +93,8 @@ Windows用ゲームパフォーマンス解析ツール。
 | 関数プロファイリング | フレームごとの関数時間内訳 |
 | パフォーマンスアラート | 異常を自動検出して通知 |
 | データ再生 | `.prof` ファイルをアップロードして履歴データを解析 |
+| **トレンド予測** | 線形回帰でFPS低下/メモリリークを予測 |
+| **パフォーマンススコア** | 総合スコア0-100、回帰検出、トレンド分析、推奨事項 |
 
 ### データファイル形式
 

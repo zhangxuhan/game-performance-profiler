@@ -3,6 +3,8 @@
 #include "AlertManager.h"
 #include "GPUProfiler.h"
 #include "MemoryAnalyzer.h"
+#include "TrendPredictor.h"
+#include "PerformanceScorer.h"
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -26,6 +28,8 @@ ProfilerCore::ProfilerCore() {
     m_gpuProfiler = std::make_unique<GPUProfiler>();
     m_gpuProfilerEnabled = true;
     m_memoryAnalyzer = std::make_unique<MemoryAnalyzer>();
+    m_trendPredictor = std::make_unique<TrendPredictor>();
+    m_performanceScorer = std::make_unique<PerformanceScorer>();
     
     // Wire alert manager to analyzer output
     m_alertManager->SetOnAlertGenerated([](const Alert& alert) {
@@ -387,6 +391,65 @@ size_t ProfilerCore::GetCurrentMemoryUsage() const {
         return m_memoryAnalyzer->GetCurrentUsage();
     }
     return 0;
+}
+
+// ─── Performance Scoring Integration ──────────────────────────────────────────
+
+PerformanceScoreCard ProfilerCore::ComputePerformanceScore() {
+    if (!m_performanceScorer || !m_analyzer) {
+        return PerformanceScoreCard();
+    }
+    
+    // Gather data from statistics analyzer
+    SummaryStats stats = m_analyzer->GetSummary();
+    
+    m_performanceScorer->SetFPSMetrics(
+        stats.avgFps,
+        stats.minFps,
+        stats.p90Fps,
+        stats.p99Fps
+    );
+    
+    m_performanceScorer->SetFrameTimeMetrics(
+        stats.avgFrameTime / 1000.0,  // convert to ms
+        stats.maxFrameTime / 1000.0,
+        stats.stdDevFrameTime / 1000.0,
+        stats.p99Fps > 0 ? 1000.0 / stats.p99Fps : 33.33
+    );
+    
+    // Gather data from memory analyzer
+    if (m_memoryAnalyzer) {
+        MemoryReport memReport = m_memoryAnalyzer->GenerateReport();
+        m_performanceScorer->SetMemoryMetrics(
+            memReport.totalMemory / (1024 * 1024),  // convert to MB
+            memReport.peakMemory / (1024 * 1024),
+            memReport.trend.growthRate / (1024 * 1024)  // convert to MB/s
+        );
+    }
+    
+    // Gather data from GPU profiler
+    if (m_gpuProfiler && m_gpuProfilerEnabled) {
+        GPUSummaryStats gpuStats = m_gpuProfiler->GetSummary();
+        m_performanceScorer->SetGPUMetrics(
+            gpuStats.avgGpuUtilization,
+            gpuStats.avgGpuFrameTime,
+            gpuStats.avgDriverOverhead
+        );
+    }
+    
+    // Set stability metrics from trend predictor
+    if (m_trendPredictor) {
+        double volatility = m_trendPredictor->CalculateVolatility();
+        double healthScore = m_trendPredictor->CalculateHealthScore();
+        
+        m_performanceScorer->SetStabilityMetrics(
+            stats.stdDevFrameTime / 1000.0,  // std dev in ms
+            volatility,
+            static_cast<int>((100.0 - healthScore) * 10)  // spike count estimate
+        );
+    }
+    
+    return m_performanceScorer->ComputeScore();
 }
 
 } // namespace ProfilerCore

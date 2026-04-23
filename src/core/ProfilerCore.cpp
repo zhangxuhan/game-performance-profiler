@@ -6,6 +6,7 @@
 #include "NetworkProfiler.h"
 #include "TrendPredictor.h"
 #include "PerformanceScorer.h"
+#include "ThermalMonitor.h"
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -32,6 +33,7 @@ ProfilerCore::ProfilerCore() {
     m_memoryAnalyzer = std::make_unique<MemoryAnalyzer>();
     m_trendPredictor = std::make_unique<TrendPredictor>();
     m_performanceScorer = std::make_unique<PerformanceScorer>();
+    m_thermalMonitor = std::make_unique<ThermalMonitor>();
     
     // Wire alert manager to analyzer output
     m_alertManager->SetOnAlertGenerated([](const Alert& alert) {
@@ -61,6 +63,9 @@ ProfilerCore::ProfilerCore() {
 
 ProfilerCore::~ProfilerCore() {
     StopSampling();
+    if (m_thermalMonitor) {
+        m_thermalMonitor->Stop();
+    }
 }
 
 void ProfilerCore::StartSampling() {
@@ -467,6 +472,37 @@ PerformanceScoreCard ProfilerCore::ComputePerformanceScore() {
     }
     
     return m_performanceScorer->ComputeScore();
+}
+
+// ─── Thermal Monitoring Integration ────────────────────────────────────────
+
+void ProfilerCore::SetThermalMonitorEnabled(bool enabled) {
+    m_thermalMonitorEnabled = enabled;
+    if (m_thermalMonitor) {
+        if (enabled) {
+            m_thermalMonitor->Start();
+        } else {
+            m_thermalMonitor->Stop();
+        }
+    }
+}
+
+bool ProfilerCore::IsThermalMonitorEnabled() const {
+    return m_thermalMonitorEnabled && m_thermalMonitor && m_thermalMonitor->IsRunning();
+}
+
+ThermalSnapshot ProfilerCore::GetThermalSnapshot() {
+    if (m_thermalMonitor && m_thermalMonitorEnabled) {
+        return m_thermalMonitor->GetSnapshot();
+    }
+    return ThermalSnapshot();
+}
+
+std::vector<CoolingRecommendation> ProfilerCore::GetCoolingRecommendations() {
+    if (m_thermalMonitor && m_thermalMonitorEnabled) {
+        return m_thermalMonitor->GetCoolingRecommendations();
+    }
+    return std::vector<CoolingRecommendation>();
 }
 
 } // namespace ProfilerCore

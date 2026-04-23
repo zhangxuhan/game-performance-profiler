@@ -112,6 +112,13 @@ public:
     PerformanceScorer* GetPerformanceScorer() { return m_performanceScorer.get(); }
     struct PerformanceScoreCard ComputePerformanceScore();
     
+    // Thermal monitoring
+    ThermalMonitor* GetThermalMonitor() { return m_thermalMonitor.get(); }
+    void SetThermalMonitorEnabled(bool enabled);
+    bool IsThermalMonitorEnabled() const;
+    struct ThermalSnapshot GetThermalSnapshot();
+    std::vector<struct CoolingRecommendation> GetCoolingRecommendations();
+    
     // Data export
     std::string ExportToJSON() const;
     std::string ExportToCSV() const;
@@ -150,6 +157,8 @@ private:
     std::unique_ptr<MemoryAnalyzer> m_memoryAnalyzer;
     std::unique_ptr<TrendPredictor> m_trendPredictor;
     std::unique_ptr<PerformanceScorer> m_performanceScorer;
+    std::unique_ptr<ThermalMonitor> m_thermalMonitor;
+    bool m_thermalMonitorEnabled = true;
     
     struct FunctionStackEntry {
         std::string name;
@@ -161,6 +170,7 @@ private:
 } // namespace ProfilerCore
 
 #include "MemoryAnalyzer.h"
+#include "ThermalMonitor.h"
 
 // Macros for easy profiling
 #define PROFILE_FUNCTION() \

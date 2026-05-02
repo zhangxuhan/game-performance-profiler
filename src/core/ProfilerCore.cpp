@@ -7,6 +7,7 @@
 #include "TrendPredictor.h"
 #include "PerformanceScorer.h"
 #include "ThermalMonitor.h"
+#include "SessionManager.h"
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -34,6 +35,7 @@ ProfilerCore::ProfilerCore() {
     m_trendPredictor = std::make_unique<TrendPredictor>();
     m_performanceScorer = std::make_unique<PerformanceScorer>();
     m_thermalMonitor = std::make_unique<ThermalMonitor>();
+    m_sessionManager = std::make_unique<SessionManager>();
     
     // Wire alert manager to analyzer output
     m_alertManager->SetOnAlertGenerated([](const Alert& alert) {
@@ -65,6 +67,13 @@ ProfilerCore::~ProfilerCore() {
     StopSampling();
     if (m_thermalMonitor) {
         m_thermalMonitor->Stop();
+    }
+    // Stop any active profiling sessions
+    if (m_sessionManager) {
+        auto activeSessions = m_sessionManager->GetActiveSessions();
+        for (const auto& info : activeSessions) {
+            m_sessionManager->StopSession(info.sessionId);
+        }
     }
 }
 
@@ -153,6 +162,19 @@ void ProfilerCore::EndFrame() {
     // Feed data to memory analyzer for frame-based tracking
     if (m_memoryAnalyzer) {
         m_memoryAnalyzer->EndFrame();
+    }
+    
+    // Feed data to session manager for event auto-detection
+    if (m_sessionManager) {
+        std::string activeId = m_sessionManager->GetActiveSessionId();
+        if (!activeId.empty()) {
+            m_sessionManager->ProcessFrameData(
+                activeId, m_currentFrame,
+                static_cast<double>(fps),
+                static_cast<double>(frameTimeMs),
+                frame.memory.currentUsage
+            );
+        }
     }
     
     // Send data to server if callback is set
@@ -503,6 +525,25 @@ std::vector<CoolingRecommendation> ProfilerCore::GetCoolingRecommendations() {
         return m_thermalMonitor->GetCoolingRecommendations();
     }
     return std::vector<CoolingRecommendation>();
+}
+
+// ─── Session Management Integration ──────────────────────────────────────────
+
+std::string ProfilerCore::StartProfilingSession(const std::string& name,
+                                                  const std::string& description,
+                                                  const std::string& gameVersion) {
+    if (!m_sessionManager) return "";
+    return m_sessionManager->StartSession(name, description, gameVersion);
+}
+
+bool ProfilerCore::StopProfilingSession(const std::string& sessionId) {
+    if (!m_sessionManager) return false;
+    return m_sessionManager->StopSession(sessionId);
+}
+
+std::string ProfilerCore::GetActiveSessionId() const {
+    if (!m_sessionManager) return "";
+    return m_sessionManager->GetActiveSessionId();
 }
 
 } // namespace ProfilerCore

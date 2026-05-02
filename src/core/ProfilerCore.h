@@ -15,6 +15,7 @@ namespace ProfilerCore {
     class NetworkProfiler;
     class TrendPredictor;
     class PerformanceScorer;
+    class SessionManager;
     struct AlertThresholds;
 }
 
@@ -119,6 +120,14 @@ public:
     struct ThermalSnapshot GetThermalSnapshot();
     std::vector<struct CoolingRecommendation> GetCoolingRecommendations();
     
+    // Session management
+    SessionManager* GetSessionManager() { return m_sessionManager.get(); }
+    std::string StartProfilingSession(const std::string& name,
+                                       const std::string& description = "",
+                                       const std::string& gameVersion = "");
+    bool StopProfilingSession(const std::string& sessionId);
+    std::string GetActiveSessionId() const;
+    
     // Data export
     std::string ExportToJSON() const;
     std::string ExportToCSV() const;
@@ -159,6 +168,7 @@ private:
     std::unique_ptr<PerformanceScorer> m_performanceScorer;
     std::unique_ptr<ThermalMonitor> m_thermalMonitor;
     bool m_thermalMonitorEnabled = true;
+    std::unique_ptr<SessionManager> m_sessionManager;
     
     struct FunctionStackEntry {
         std::string name;
@@ -171,6 +181,7 @@ private:
 
 #include "MemoryAnalyzer.h"
 #include "ThermalMonitor.h"
+#include "SessionManager.h"
 
 // Macros for easy profiling
 #define PROFILE_FUNCTION() \

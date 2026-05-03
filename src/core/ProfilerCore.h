@@ -16,6 +16,7 @@ namespace ProfilerCore {
     class TrendPredictor;
     class PerformanceScorer;
     class SessionManager;
+    class ComparativeAnalyzer;
     struct AlertThresholds;
 }
 
@@ -128,6 +129,12 @@ public:
     bool StopProfilingSession(const std::string& sessionId);
     std::string GetActiveSessionId() const;
     
+    // Comparative analysis
+    ComparativeAnalyzer* GetComparativeAnalyzer() { return m_comparativeAnalyzer.get(); }
+    struct ComparisonReport CompareWithBaseline(const std::string& baselineSessionId);
+    struct ComparisonReport CompareWithHistoricalAverage();
+    void RecordCurrentSessionForComparison();
+    
     // Data export
     std::string ExportToJSON() const;
     std::string ExportToCSV() const;
@@ -169,6 +176,7 @@ private:
     std::unique_ptr<ThermalMonitor> m_thermalMonitor;
     bool m_thermalMonitorEnabled = true;
     std::unique_ptr<SessionManager> m_sessionManager;
+    std::unique_ptr<ComparativeAnalyzer> m_comparativeAnalyzer;
     
     struct FunctionStackEntry {
         std::string name;
@@ -182,6 +190,7 @@ private:
 #include "MemoryAnalyzer.h"
 #include "ThermalMonitor.h"
 #include "SessionManager.h"
+#include "ComparativeAnalyzer.h"}]}
 
 // Macros for easy profiling
 #define PROFILE_FUNCTION() \

@@ -29,6 +29,7 @@ Windows 游戏性能分析工具。
 | **性能评分** | 综合评分 0-100，自动检测性能回归，趋势分析，生成优化建议 |
 | **温度监控** | CPU/GPU温度追踪，热节流检测，智能降温建议 |
 | **会话管理** | 命名分析会话，事件标记，书签导航，区域分析，会话对比 |
+| **对比分析** | 会话对比，历史趋势，回归检测，性能评分变化 |
 
 ### 数据文件格式
 
@@ -65,6 +66,7 @@ Windows game performance profiling tool.
 | **Performance Scoring** | Overall score 0-100, regression detection, trend analysis, recommendations |
 | **Thermal Monitoring** | CPU/GPU temperature tracking, throttling detection, cooling recommendations |
 | **Session Management** | Named profiling sessions, event tagging, bookmark navigation, region analysis, session comparison |
+| **Comparative Analysis** | Session comparison, historical trends, regression detection, performance score changes |
 
 ### Data File Format
 
@@ -101,6 +103,7 @@ Windows用ゲームパフォーマンス解析ツール。
 | **パフォーマンススコア** | 総合スコア0-100、回帰検出、トレンド分析、推奨事項 |
 | **温度監視** | CPU/GPU温度追跡、スロットリング検出、冷却推奨 |
 | **セッション管理** | 名前付きプロファイリングセッション、イベントタグ付け、ブックマークナビゲーション、リージョン分析、セッション比較 |
+| **比較分析** | セッション比較、履歴トレンド、回帰検出、パフォーマンススコア変化 |
 
 ### データファイル形式
 

@@ -17,6 +17,7 @@ namespace ProfilerCore {
     class PerformanceScorer;
     class SessionManager;
     class ComparativeAnalyzer;
+    class ConfigManager;
     struct AlertThresholds;
 }
 
@@ -134,6 +135,12 @@ public:
     struct ComparisonReport CompareWithBaseline(const std::string& baselineSessionId);
     struct ComparisonReport CompareWithHistoricalAverage();
     void RecordCurrentSessionForComparison();
+
+    // Configuration management
+    ConfigManager* GetConfigManager() { return &ConfigManager::GetInstance(); }
+    bool LoadConfigFromFile(const std::string& filepath);
+    bool SaveConfigToFile(const std::string& filepath) const;
+    bool ApplyConfigPreset(const std::string& presetName);
     
     // Data export
     std::string ExportToJSON() const;
@@ -177,6 +184,7 @@ private:
     bool m_thermalMonitorEnabled = true;
     std::unique_ptr<SessionManager> m_sessionManager;
     std::unique_ptr<ComparativeAnalyzer> m_comparativeAnalyzer;
+    // ConfigManager is a singleton, not owned
     
     struct FunctionStackEntry {
         std::string name;
@@ -190,7 +198,8 @@ private:
 #include "MemoryAnalyzer.h"
 #include "ThermalMonitor.h"
 #include "SessionManager.h"
-#include "ComparativeAnalyzer.h"}]}
+#include "ComparativeAnalyzer.h"
+#include "ConfigManager.h"}]}
 
 // Macros for easy profiling
 #define PROFILE_FUNCTION() \

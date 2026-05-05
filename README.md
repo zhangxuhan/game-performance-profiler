@@ -30,6 +30,7 @@ Windows 游戏性能分析工具。
 | **温度监控** | CPU/GPU温度追踪，热节流检测，智能降温建议 |
 | **会话管理** | 命名分析会话，事件标记，书签导航，区域分析，会话对比 |
 | **对比分析** | 会话对比，历史趋势，回归检测，性能评分变化 |
+| **配置管理** | 分层配置（默认/文件/运行时），JSON导入导出，5种预设，变更监听，范围校验 |
 
 ### 数据文件格式
 
@@ -67,6 +68,7 @@ Windows game performance profiling tool.
 | **Thermal Monitoring** | CPU/GPU temperature tracking, throttling detection, cooling recommendations |
 | **Session Management** | Named profiling sessions, event tagging, bookmark navigation, region analysis, session comparison |
 | **Comparative Analysis** | Session comparison, historical trends, regression detection, performance score changes |
+| **Config Management** | Hierarchical config (default/file/runtime), JSON import/export, 5 presets, change listeners, range validation |
 
 ### Data File Format
 
@@ -104,6 +106,7 @@ Windows用ゲームパフォーマンス解析ツール。
 | **温度監視** | CPU/GPU温度追跡、スロットリング検出、冷却推奨 |
 | **セッション管理** | 名前付きプロファイリングセッション、イベントタグ付け、ブックマークナビゲーション、リージョン分析、セッション比較 |
 | **比較分析** | セッション比較、履歴トレンド、回帰検出、パフォーマンススコア変化 |
+| **設定管理** | 階層型設定（デフォルト/ファイル/ランタイム）、JSON インポート/エクスポート、5つのプリセット、変更リスナー、範囲検証 |
 
 ### データファイル形式
 

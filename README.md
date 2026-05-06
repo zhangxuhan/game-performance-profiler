@@ -31,6 +31,7 @@ Windows 游戏性能分析工具。
 | **会话管理** | 命名分析会话，事件标记，书签导航，区域分析，会话对比 |
 | **对比分析** | 会话对比，历史趋势，回归检测，性能评分变化 |
 | **配置管理** | 分层配置（默认/文件/运行时），JSON导入导出，5种预设，变更监听，范围校验 |
+| **抖动分析** | 帧时间抖动模式识别，根因分析（CPU/GPU/IO），优化建议生成 |
 
 ### 数据文件格式
 
@@ -69,6 +70,7 @@ Windows game performance profiling tool.
 | **Session Management** | Named profiling sessions, event tagging, bookmark navigation, region analysis, session comparison |
 | **Comparative Analysis** | Session comparison, historical trends, regression detection, performance score changes |
 | **Config Management** | Hierarchical config (default/file/runtime), JSON import/export, 5 presets, change listeners, range validation |
+| **Jitter Analysis** | Frame time jitter pattern detection, root cause analysis (CPU/GPU/IO), optimization recommendations |
 
 ### Data File Format
 
@@ -107,6 +109,7 @@ Windows用ゲームパフォーマンス解析ツール。
 | **セッション管理** | 名前付きプロファイリングセッション、イベントタグ付け、ブックマークナビゲーション、リージョン分析、セッション比較 |
 | **比較分析** | セッション比較、履歴トレンド、回帰検出、パフォーマンススコア変化 |
 | **設定管理** | 階層型設定（デフォルト/ファイル/ランタイム）、JSON インポート/エクスポート、5つのプリセット、変更リスナー、範囲検証 |
+| **ジッター分析** | フレームタイムジッターパターン検出、原因分析（CPU/GPU/IO）、最適化推奨 |
 
 ### データファイル形式
 

@@ -8,16 +8,7 @@
 
 // Forward declare to avoid circular dependency
 namespace ProfilerCore {
-    class StatisticsAnalyzer;
-    class AlertManager;
-    class GPUProfiler;
-    class MemoryAnalyzer;
-    class NetworkProfiler;
     class TrendPredictor;
-    class PerformanceScorer;
-    class SessionManager;
-    class ComparativeAnalyzer;
-    class ConfigManager;
     struct AlertThresholds;
 }
 
@@ -73,24 +64,24 @@ public:
     MemorySnapshot GetMemorySnapshot() const;
     
     // Statistics analysis
-    StatisticsAnalyzer* GetAnalyzer() { return m_analyzer.get(); }
+    class StatisticsAnalyzer* GetAnalyzer() { return m_analyzer.get(); }
     void SetAnalyzerWindowSize(size_t windowSize);
     void SetAnalyzerThresholds(const struct AlertThresholds& thresholds);
     
     // Alert management
-    AlertManager* GetAlertManager() { return m_alertManager.get(); }
+    class AlertManager* GetAlertManager() { return m_alertManager.get(); }
     void SetAlertConfig(const struct AlertConfig& config);
     const std::vector<struct Alert>& GetActiveAlerts() const;
     bool AcknowledgeAlert(int alertId);
     bool AcknowledgeAllAlerts();
     
     // GPU Profiling
-    GPUProfiler* GetGPUProfiler() { return m_gpuProfiler.get(); }
+    class GPUProfiler* GetGPUProfiler() { return m_gpuProfiler.get(); }
     void SetGPUProfilerEnabled(bool enabled);
     bool IsGPUProfilerEnabled() const { return m_gpuProfilerEnabled; }
 
     // Network Profiling
-    NetworkProfiler* GetNetworkProfiler() { return m_networkProfiler.get(); }
+    class NetworkProfiler* GetNetworkProfiler() { return m_networkProfiler.get(); }
     void SetNetworkProfilerEnabled(bool enabled);
     bool IsNetworkProfilerEnabled() const;
 
@@ -99,7 +90,7 @@ public:
     std::string GetCurrentBottleneck() const;
 
     // Memory analysis
-    MemoryAnalyzer* GetMemoryAnalyzer() { return m_memoryAnalyzer.get(); }
+    class MemoryAnalyzer* GetMemoryAnalyzer() { return m_memoryAnalyzer.get(); }
     int64_t TrackMemoryAllocation(size_t size, enum MemoryCategory category = MemoryCategory::General,
                                    const std::string& tag = "",
                                    const char* file = nullptr, int line = 0);
@@ -112,18 +103,18 @@ public:
     TrendPredictor* GetTrendPredictor() { return m_trendPredictor.get(); }
     
     // Performance scoring
-    PerformanceScorer* GetPerformanceScorer() { return m_performanceScorer.get(); }
+    class PerformanceScorer* GetPerformanceScorer() { return m_performanceScorer.get(); }
     struct PerformanceScoreCard ComputePerformanceScore();
     
     // Thermal monitoring
-    ThermalMonitor* GetThermalMonitor() { return m_thermalMonitor.get(); }
+    class ThermalMonitor* GetThermalMonitor() { return m_thermalMonitor.get(); }
     void SetThermalMonitorEnabled(bool enabled);
     bool IsThermalMonitorEnabled() const;
     struct ThermalSnapshot GetThermalSnapshot();
     std::vector<struct CoolingRecommendation> GetCoolingRecommendations();
     
     // Session management
-    SessionManager* GetSessionManager() { return m_sessionManager.get(); }
+    class SessionManager* GetSessionManager() { return m_sessionManager.get(); }
     std::string StartProfilingSession(const std::string& name,
                                        const std::string& description = "",
                                        const std::string& gameVersion = "");
@@ -131,13 +122,13 @@ public:
     std::string GetActiveSessionId() const;
     
     // Comparative analysis
-    ComparativeAnalyzer* GetComparativeAnalyzer() { return m_comparativeAnalyzer.get(); }
+    class ComparativeAnalyzer* GetComparativeAnalyzer() { return m_comparativeAnalyzer.get(); }
     struct ComparisonReport CompareWithBaseline(const std::string& baselineSessionId);
     struct ComparisonReport CompareWithHistoricalAverage();
     void RecordCurrentSessionForComparison();
 
     // Configuration management
-    ConfigManager* GetConfigManager() { return &ConfigManager::GetInstance(); }
+    class ConfigManager* GetConfigManager() { return &ConfigManager::GetInstance(); }
     bool LoadConfigFromFile(const std::string& filepath);
     bool SaveConfigToFile(const std::string& filepath) const;
     bool ApplyConfigPreset(const std::string& presetName);
@@ -172,18 +163,18 @@ private:
     
     DataCallback m_dataCallback;
     
-    std::unique_ptr<StatisticsAnalyzer> m_analyzer;
-    std::unique_ptr<AlertManager> m_alertManager;
-    std::unique_ptr<GPUProfiler> m_gpuProfiler;
+    std::unique_ptr<class StatisticsAnalyzer> m_analyzer;
+    std::unique_ptr<class AlertManager> m_alertManager;
+    std::unique_ptr<class GPUProfiler> m_gpuProfiler;
     bool m_gpuProfilerEnabled = true;
-    std::unique_ptr<NetworkProfiler> m_networkProfiler;
-    std::unique_ptr<MemoryAnalyzer> m_memoryAnalyzer;
+    std::unique_ptr<class NetworkProfiler> m_networkProfiler;
+    std::unique_ptr<class MemoryAnalyzer> m_memoryAnalyzer;
     std::unique_ptr<TrendPredictor> m_trendPredictor;
-    std::unique_ptr<PerformanceScorer> m_performanceScorer;
-    std::unique_ptr<ThermalMonitor> m_thermalMonitor;
+    std::unique_ptr<class PerformanceScorer> m_performanceScorer;
+    std::unique_ptr<class ThermalMonitor> m_thermalMonitor;
     bool m_thermalMonitorEnabled = true;
-    std::unique_ptr<SessionManager> m_sessionManager;
-    std::unique_ptr<ComparativeAnalyzer> m_comparativeAnalyzer;
+    std::unique_ptr<class SessionManager> m_sessionManager;
+    std::unique_ptr<class ComparativeAnalyzer> m_comparativeAnalyzer;
     // ConfigManager is a singleton, not owned
     
     struct FunctionStackEntry {
@@ -199,21 +190,5 @@ private:
 #include "ThermalMonitor.h"
 #include "SessionManager.h"
 #include "ComparativeAnalyzer.h"
-#include "ConfigManager.h"}]}
-
-// Macros for easy profiling
-#define PROFILE_FUNCTION() \
-    static ProfilerCore::FunctionProfile __profile__##__LINE__(__FUNCTION__)
-
-#define PROFILE_SCOPE(name) \
-    static ProfilerCore::ScopeProfile __scope__##__LINE__(name)
-
-// Memory tracking macros
-#define TRACK_MEMORY(size, category, tag) \
-    ProfilerCore::ProfilerCore::GetInstance().TrackMemoryAllocation(size, category, tag, __FILE__, __LINE__)
-
-#define TRACK_MEMORY_SIMPLE(size) \
-    ProfilerCore::ProfilerCore::GetInstance().TrackMemoryAllocation(size, ProfilerCore::MemoryCategory::General, "", __FILE__, __LINE__)
-
-#define FREE_MEMORY(id) \
-    ProfilerCore::ProfilerCore::GetInstance().TrackMemoryDeallocation(id)
+#include "ConfigManager.h"
+#include "TrendPredictor.h"

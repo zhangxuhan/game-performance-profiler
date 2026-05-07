@@ -4,10 +4,10 @@
 #include "GPUProfiler.h"
 #include "MemoryAnalyzer.h"
 #include "NetworkProfiler.h"
-#include "TrendPredictor.h"
 #include "PerformanceScorer.h"
 #include "ThermalMonitor.h"
 #include "SessionManager.h"
+#include "TrendPredictor.h"
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -175,6 +175,16 @@ void ProfilerCore::EndFrame() {
                 frame.memory.currentUsage
             );
         }
+    }
+    
+    // Feed data to trend predictor for trend analysis and prediction
+    if (m_trendPredictor) {
+        m_trendPredictor->RecordFrame(
+            m_currentFrame,
+            static_cast<double>(fps),
+            static_cast<double>(frameTimeMs),
+            frame.memory.currentUsage
+        );
     }
     
     // Send data to server if callback is set

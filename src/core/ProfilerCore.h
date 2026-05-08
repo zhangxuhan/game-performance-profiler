@@ -102,6 +102,11 @@ public:
     // Trend prediction
     TrendPredictor* GetTrendPredictor() { return m_trendPredictor.get(); }
     
+    // Frame spike analysis
+    class FrameSpikeAnalyzer* GetFrameSpikeAnalyzer() { return m_frameSpikeAnalyzer.get(); }
+    struct SpikeStatistics GetSpikeStatistics() const;
+    std::vector<struct FrameSpike> GetRecentSpikes(int count) const;
+    
     // Performance scoring
     class PerformanceScorer* GetPerformanceScorer() { return m_performanceScorer.get(); }
     struct PerformanceScoreCard ComputePerformanceScore();
@@ -170,6 +175,7 @@ private:
     std::unique_ptr<class NetworkProfiler> m_networkProfiler;
     std::unique_ptr<class MemoryAnalyzer> m_memoryAnalyzer;
     std::unique_ptr<TrendPredictor> m_trendPredictor;
+    std::unique_ptr<class FrameSpikeAnalyzer> m_frameSpikeAnalyzer;
     std::unique_ptr<class PerformanceScorer> m_performanceScorer;
     std::unique_ptr<class ThermalMonitor> m_thermalMonitor;
     bool m_thermalMonitorEnabled = true;
@@ -192,3 +198,4 @@ private:
 #include "ComparativeAnalyzer.h"
 #include "ConfigManager.h"
 #include "TrendPredictor.h"
+#include "FrameSpikeAnalyzer.h"

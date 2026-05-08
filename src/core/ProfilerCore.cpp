@@ -8,6 +8,9 @@
 #include "ThermalMonitor.h"
 #include "SessionManager.h"
 #include "TrendPredictor.h"
+#include "FrameSpikeAnalyzer.h"
+#include "ComparativeAnalyzer.h"
+#include "ConfigManager.h"
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -33,9 +36,11 @@ ProfilerCore::ProfilerCore() {
     m_networkProfiler = std::make_unique<NetworkProfiler>();
     m_memoryAnalyzer = std::make_unique<MemoryAnalyzer>();
     m_trendPredictor = std::make_unique<TrendPredictor>();
+    m_frameSpikeAnalyzer = std::make_unique<FrameSpikeAnalyzer>();
     m_performanceScorer = std::make_unique<PerformanceScorer>();
     m_thermalMonitor = std::make_unique<ThermalMonitor>();
     m_sessionManager = std::make_unique<SessionManager>();
+    m_comparativeAnalyzer = std::make_unique<ComparativeAnalyzer>();
     
     // Wire alert manager to analyzer output
     m_alertManager->SetOnAlertGenerated([](const Alert& alert) {
@@ -187,6 +192,15 @@ void ProfilerCore::EndFrame() {
         );
     }
     
+    // Feed data to frame spike analyzer for spike detection
+    if (m_frameSpikeAnalyzer) {
+        m_frameSpikeAnalyzer->RecordFrameSimple(
+            static_cast<double>(frameTimeMs),
+            static_cast<double>(frameTimeMs * 0.5),  // Estimate CPU time
+            static_cast<double>(frameTimeMs * 0.5)   // Estimate GPU time
+        );
+    }
+    
     // Send data to server if callback is set
     if (m_dataCallback) {
         SendDataToServer();
@@ -325,6 +339,11 @@ std::string ProfilerCore::ExportToJSON() const {
     // Append network profiling data if available
     if (m_networkProfiler) {
         ss << ",\"network\":" << m_networkProfiler->ExportToJSON();
+    }
+    
+    // Append frame spike analysis if available
+    if (m_frameSpikeAnalyzer) {
+        ss << ",\"spikes\":" << m_frameSpikeAnalyzer->ExportToJSON();
     }
     
     ss << "}";
@@ -554,6 +573,22 @@ bool ProfilerCore::StopProfilingSession(const std::string& sessionId) {
 std::string ProfilerCore::GetActiveSessionId() const {
     if (!m_sessionManager) return "";
     return m_sessionManager->GetActiveSessionId();
+}
+
+// ─── Frame Spike Analysis Integration ─────────────────────────────────────────
+
+SpikeStatistics ProfilerCore::GetSpikeStatistics() const {
+    if (m_frameSpikeAnalyzer) {
+        return m_frameSpikeAnalyzer->GetStatistics();
+    }
+    return SpikeStatistics();
+}
+
+std::vector<FrameSpike> ProfilerCore::GetRecentSpikes(int count) const {
+    if (m_frameSpikeAnalyzer) {
+        return m_frameSpikeAnalyzer->GetRecentSpikes(count);
+    }
+    return std::vector<FrameSpike>();
 }
 
 } // namespace ProfilerCore

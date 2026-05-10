@@ -11,6 +11,7 @@
 #include "FrameSpikeAnalyzer.h"
 #include "ComparativeAnalyzer.h"
 #include "ConfigManager.h"
+#include "AutoTuner.h"
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -41,7 +42,8 @@ ProfilerCore::ProfilerCore() {
     m_thermalMonitor = std::make_unique<ThermalMonitor>();
     m_sessionManager = std::make_unique<SessionManager>();
     m_comparativeAnalyzer = std::make_unique<ComparativeAnalyzer>();
-    
+    m_autoTuner = std::make_unique<AutoTuner>();
+
     // Wire alert manager to analyzer output
     m_alertManager->SetOnAlertGenerated([](const Alert& alert) {
         std::cout << "[Profiler Alert] " << alert.message << std::endl;

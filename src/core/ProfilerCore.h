@@ -10,6 +10,7 @@
 namespace ProfilerCore {
     class TrendPredictor;
     struct AlertThresholds;
+    class AutoTuner;
 }
 
 namespace ProfilerCore {
@@ -132,6 +133,9 @@ public:
     struct ComparisonReport CompareWithHistoricalAverage();
     void RecordCurrentSessionForComparison();
 
+    // Auto-tuning / optimization advisor
+    class AutoTuner* GetAutoTuner() { return m_autoTuner.get(); }
+
     // Configuration management
     class ConfigManager* GetConfigManager() { return &ConfigManager::GetInstance(); }
     bool LoadConfigFromFile(const std::string& filepath);
@@ -181,6 +185,7 @@ private:
     bool m_thermalMonitorEnabled = true;
     std::unique_ptr<class SessionManager> m_sessionManager;
     std::unique_ptr<class ComparativeAnalyzer> m_comparativeAnalyzer;
+    std::unique_ptr<class AutoTuner> m_autoTuner;  // Automated optimization advisor
     // ConfigManager is a singleton, not owned
     
     struct FunctionStackEntry {
@@ -199,3 +204,4 @@ private:
 #include "ConfigManager.h"
 #include "TrendPredictor.h"
 #include "FrameSpikeAnalyzer.h"
+#include "AutoTuner.h"

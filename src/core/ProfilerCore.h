@@ -11,6 +11,7 @@ namespace ProfilerCore {
     class TrendPredictor;
     struct AlertThresholds;
     class AutoTuner;
+    class PowerAnalyzer;
 }
 
 namespace ProfilerCore {
@@ -136,6 +137,12 @@ public:
     // Auto-tuning / optimization advisor
     class AutoTuner* GetAutoTuner() { return m_autoTuner.get(); }
 
+    // Power analysis
+    class PowerAnalyzer* GetPowerAnalyzer() { return m_powerAnalyzer.get(); }
+    bool HasBattery() const;
+    double GetBatteryPercent() const;
+    struct PowerReport GetPowerReport() const;
+
     // Configuration management
     class ConfigManager* GetConfigManager() { return &ConfigManager::GetInstance(); }
     bool LoadConfigFromFile(const std::string& filepath);
@@ -186,6 +193,7 @@ private:
     std::unique_ptr<class SessionManager> m_sessionManager;
     std::unique_ptr<class ComparativeAnalyzer> m_comparativeAnalyzer;
     std::unique_ptr<class AutoTuner> m_autoTuner;  // Automated optimization advisor
+    std::unique_ptr<class PowerAnalyzer> m_powerAnalyzer;  // Power consumption analysis
     // ConfigManager is a singleton, not owned
     
     struct FunctionStackEntry {
@@ -205,3 +213,4 @@ private:
 #include "TrendPredictor.h"
 #include "FrameSpikeAnalyzer.h"
 #include "AutoTuner.h"
+#include "PowerAnalyzer.h"

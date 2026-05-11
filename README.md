@@ -33,6 +33,7 @@ Windows 游戏性能分析工具。
 | **配置管理** | 分层配置（默认/文件/运行时），JSON导入导出，5种预设，变更监听，范围校验 |
 | **抖动分析** | 帧时间抖动模式识别，根因分析（CPU/GPU/IO），优化建议生成 |
 | **帧尖峰分析** | 深度帧尖峰检测，根因分类（GC/加载/渲染/IO等），重复模式识别，优化建议 |
+| **功耗分析** | CPU/GPU功耗追踪，电池状态监控，能效评分（FPS/W），节电建议 |
 
 ### 数据文件格式
 
@@ -73,6 +74,7 @@ Windows game performance profiling tool.
 | **Config Management** | Hierarchical config (default/file/runtime), JSON import/export, 5 presets, change listeners, range validation |
 | **Jitter Analysis** | Frame time jitter pattern detection, root cause analysis (CPU/GPU/IO), optimization recommendations |
 | **Frame Spike Analysis** | Deep spike detection, root cause classification (GC/Loading/Render/IO), recurring pattern detection, optimization suggestions |
+| **Power Analysis** | CPU/GPU power tracking, battery status, efficiency score (FPS/W), power-saving recommendations |
 
 ### Data File Format
 
@@ -113,6 +115,7 @@ Windows用ゲームパフォーマンス解析ツール。
 | **設定管理** | 階層型設定（デフォルト/ファイル/ランタイム）、JSON インポート/エクスポート、5つのプリセット、変更リスナー、範囲検証 |
 | **ジッター分析** | フレームタイムジッターパターン検出、原因分析（CPU/GPU/IO）、最適化推奨 |
 | **フレームスパイク分析** | 詳細スパイク検出、原因分類（GC/読み込み/レンダリング/IO）、繰り返しパターン検出、最適化提案 |
+| **電力分析** | CPU/GPU電力追跡、バッテリー状態、効率スコア（FPS/W）、省電力推奨 |
 
 ### データファイル形式
 

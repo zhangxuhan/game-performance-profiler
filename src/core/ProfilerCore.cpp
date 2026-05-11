@@ -12,6 +12,7 @@
 #include "ComparativeAnalyzer.h"
 #include "ConfigManager.h"
 #include "AutoTuner.h"
+#include "PowerAnalyzer.h"
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -43,6 +44,7 @@ ProfilerCore::ProfilerCore() {
     m_sessionManager = std::make_unique<SessionManager>();
     m_comparativeAnalyzer = std::make_unique<ComparativeAnalyzer>();
     m_autoTuner = std::make_unique<AutoTuner>();
+    m_powerAnalyzer = std::make_unique<PowerAnalyzer>();
 
     // Wire alert manager to analyzer output
     m_alertManager->SetOnAlertGenerated([](const Alert& alert) {
@@ -67,6 +69,11 @@ ProfilerCore::ProfilerCore() {
             default: break;
         }
         std::cout << "[Memory Pressure] Level: " << level << std::endl;
+    });
+
+    // Wire power analyzer alerts
+    m_powerAnalyzer->SetAlertCallback([](const PowerAlert& alert) {
+        std::cout << "[Power Alert] " << alert.message << ": " << alert.details << std::endl;
     });
 }
 
@@ -591,6 +598,29 @@ std::vector<FrameSpike> ProfilerCore::GetRecentSpikes(int count) const {
         return m_frameSpikeAnalyzer->GetRecentSpikes(count);
     }
     return std::vector<FrameSpike>();
+}
+
+// ─── Power Analyzer Integration ────────────────────────────────────────────────
+
+bool ProfilerCore::HasBattery() const {
+    if (m_powerAnalyzer) {
+        return m_powerAnalyzer->HasBattery();
+    }
+    return false;
+}
+
+double ProfilerCore::GetBatteryPercent() const {
+    if (m_powerAnalyzer) {
+        return m_powerAnalyzer->GetBatteryPercent();
+    }
+    return 100.0;
+}
+
+PowerReport ProfilerCore::GetPowerReport() const {
+    if (m_powerAnalyzer) {
+        return m_powerAnalyzer->GenerateReport();
+    }
+    return PowerReport();
 }
 
 } // namespace ProfilerCore

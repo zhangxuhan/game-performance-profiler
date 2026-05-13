@@ -12,6 +12,7 @@ namespace ProfilerCore {
     struct AlertThresholds;
     class AutoTuner;
     class PowerAnalyzer;
+    class GCAnalyzer;
 }
 
 namespace ProfilerCore {
@@ -143,6 +144,12 @@ public:
     double GetBatteryPercent() const;
     struct PowerReport GetPowerReport() const;
 
+    // GC Analysis
+    class GCAnalyzer* GetGCAnalyzer() { return m_gcAnalyzer.get(); }
+    void RecordAllocation(const std::string& category, const std::string& name, size_t sizeBytes);
+    void RecordGCEvent(enum GCGeneration gen, double pauseMs, enum GCTrigger trigger,
+                      size_t heapBefore, size_t heapAfter, size_t promoted);
+
     // Configuration management
     class ConfigManager* GetConfigManager() { return &ConfigManager::GetInstance(); }
     bool LoadConfigFromFile(const std::string& filepath);
@@ -194,6 +201,7 @@ private:
     std::unique_ptr<class ComparativeAnalyzer> m_comparativeAnalyzer;
     std::unique_ptr<class AutoTuner> m_autoTuner;  // Automated optimization advisor
     std::unique_ptr<class PowerAnalyzer> m_powerAnalyzer;  // Power consumption analysis
+    std::unique_ptr<class GCAnalyzer> m_gcAnalyzer;  // GC (garbage collection) analysis
     // ConfigManager is a singleton, not owned
     
     struct FunctionStackEntry {
@@ -214,3 +222,4 @@ private:
 #include "FrameSpikeAnalyzer.h"
 #include "AutoTuner.h"
 #include "PowerAnalyzer.h"
+#include "GCAnalyzer.h"

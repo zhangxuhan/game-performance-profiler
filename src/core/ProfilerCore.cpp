@@ -13,6 +13,7 @@
 #include "ConfigManager.h"
 #include "AutoTuner.h"
 #include "PowerAnalyzer.h"
+#include "GCAnalyzer.h"
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -45,6 +46,7 @@ ProfilerCore::ProfilerCore() {
     m_comparativeAnalyzer = std::make_unique<ComparativeAnalyzer>();
     m_autoTuner = std::make_unique<AutoTuner>();
     m_powerAnalyzer = std::make_unique<PowerAnalyzer>();
+    m_gcAnalyzer = std::make_unique<GCAnalyzer>();
 
     // Wire alert manager to analyzer output
     m_alertManager->SetOnAlertGenerated([](const Alert& alert) {
@@ -621,6 +623,26 @@ PowerReport ProfilerCore::GetPowerReport() const {
         return m_powerAnalyzer->GenerateReport();
     }
     return PowerReport();
+}
+
+// ─── GC Analysis Integration ──────────────────────────────────────────────────
+
+void ProfilerCore::RecordAllocation(const std::string& category,
+                                      const std::string& name,
+                                      size_t sizeBytes) {
+    if (m_gcAnalyzer) {
+        m_gcAnalyzer->RecordAllocation(category, name, sizeBytes);
+    }
+}
+
+void ProfilerCore::RecordGCEvent(enum GCGeneration gen, double pauseMs,
+                                   enum GCTrigger trigger,
+                                   size_t heapBefore, size_t heapAfter,
+                                   size_t promoted) {
+    if (m_gcAnalyzer) {
+        m_gcAnalyzer->RecordGCEvent(gen, pauseMs, trigger,
+                                      heapBefore, heapAfter, promoted);
+    }
 }
 
 } // namespace ProfilerCore

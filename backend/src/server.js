@@ -118,10 +118,10 @@ let frameCount = 0;
 let baseFps = 60;
 let baseMemory = 50 * 1024 * 1024;
 
-// ==========================================
-// Profiler Attacher Integration
-// ==========================================
-const profilerAttacher = require('./profiler-attacher');
+// ─────────────────────────────────────────────
+// Dashboard API - Advanced analytics
+// ─────────────────────────────────────────────
+const { setupDashboardAPI } = require('./dashboard-api');
 const { listGameProcesses } = require('./process-monitor');
 const { spawn } = require('child_process');
 
@@ -1001,6 +1001,9 @@ function startServer() {
 
     // Setup API routes FIRST (before static files)
     setupRoutes(app);
+
+    // Dashboard API - advanced analytics endpoints
+    setupDashboardAPI(app, () => frameHistory);
 
     // Serve static files in production (after API routes)
     if (IS_PRODUCTION) {

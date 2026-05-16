@@ -36,6 +36,7 @@ Windows 游戏性能分析工具。
 | **功耗分析** | CPU/GPU功耗追踪，电池状态监控，能效评分（FPS/W），节电建议 |
 | **GC分析** | 垃圾回收事件追踪，暂停时间分析，内存分配热点检测，GC优化建议 |
 | **仪表盘API** | 时间序列聚合、趋势分析、性能评分、数据导出（CSV/JSON/PROF）、录制会话管理、异常检测 |
+| **热力图分析** | FPS/内存/温度/帧时间可视化热力图、函数调用热力图、会话对比热力图、SVG导出可视化 |
 
 ### 数据文件格式
 
@@ -79,6 +80,7 @@ Windows game performance profiling tool.
 | **Power Analysis** | CPU/GPU power tracking, battery status, efficiency score (FPS/W), power-saving recommendations |
 | **GC Analysis** | Garbage collection event tracking, pause time analysis, allocation hotspot detection, GC optimization recommendations |
 | **Dashboard API** | Time-series aggregation, trend analysis, performance scoring, data export (CSV/JSON/PROF), recording session management, anomaly detection |
+| **Heatmap Analysis** | Visual heatmaps for FPS/memory/thermal/frame time, call stack heatmap, comparative session heatmaps, SVG export for visualization |
 
 ### Data File Format
 
@@ -122,6 +124,7 @@ Windows用ゲームパフォーマンス解析ツール。
 | **電力分析** | CPU/GPU電力追跡、バッテリー状態、効率スコア（FPS/W）、省電力推奨 |
 | **GC分析** | ガーベジコレクションイベント追跡、一時停止時間分析、メモリ配置ホットスポット検出、GC最適化推奨 |
 | **ダッシュボードAPI** | 時系列アグリゲーション、トレンド分析、パフォーマンススコアリング、データエクスポート（CSV/JSON/PROF）、録画セッション管理、異常検出 |
+| **ヒートマップ分析** | FPS/メモリ/温度/フレームタイムのビジュアルヒートマップ、コールスタックヒートマップ、セッション比較ヒートマップ、SVGエクスポート対応 |
 
 ### データファイル形式
 

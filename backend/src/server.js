@@ -122,6 +122,7 @@ let baseMemory = 50 * 1024 * 1024;
 // Dashboard API - Advanced analytics
 // ─────────────────────────────────────────────
 const { setupDashboardAPI } = require('./dashboard-api');
+const { setupHeatmapAPI } = require('./heatmap-analyzer');
 const { listGameProcesses } = require('./process-monitor');
 const { spawn } = require('child_process');
 
@@ -1004,6 +1005,9 @@ function startServer() {
 
     // Dashboard API - advanced analytics endpoints
     setupDashboardAPI(app, () => frameHistory);
+
+    // Heatmap API - visual heatmap generation endpoints
+    setupHeatmapAPI(app, () => frameHistory);
 
     // Serve static files in production (after API routes)
     if (IS_PRODUCTION) {

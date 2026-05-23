@@ -47,6 +47,7 @@ ProfilerCore::ProfilerCore() {
     m_autoTuner = std::make_unique<AutoTuner>();
     m_powerAnalyzer = std::make_unique<PowerAnalyzer>();
     m_gcAnalyzer = std::make_unique<GCAnalyzer>();
+    m_threadingAnalyzer = std::make_unique<ThreadingAnalyzer>();  // NEW
 
     // Wire alert manager to analyzer output
     m_alertManager->SetOnAlertGenerated([](const Alert& alert) {
@@ -642,6 +643,43 @@ void ProfilerCore::RecordGCEvent(enum GCGeneration gen, double pauseMs,
     if (m_gcAnalyzer) {
         m_gcAnalyzer->RecordGCEvent(gen, pauseMs, trigger,
                                       heapBefore, heapAfter, promoted);
+    }
+}
+
+// ─── Threading Analysis Integration ──────────────────────────────────
+
+void ProfilerCore::RegisterThread(std::thread::id tid, ThreadRole role,
+                                    const std::string& name) {
+    if (m_threadingAnalyzer) {
+        m_threadingAnalyzer->RegisterThread(tid, role, name);
+    }
+}
+
+void ProfilerCore::UnregisterThread(std::thread::id tid) {
+    if (m_threadingAnalyzer) {
+        m_threadingAnalyzer->UnregisterThread(tid);
+    }
+}
+
+void ProfilerCore::RecordThreadContentionStart(std::thread::id tid,
+                                                 ContentionType type,
+                                                 const std::string& lockName) {
+    if (m_threadingAnalyzer) {
+        m_threadingAnalyzer->RecordContentionStart(tid, type, lockName);
+    }
+}
+
+void ProfilerCore::RecordThreadContentionEnd(std::thread::id tid, uint64_t durationUs) {
+    if (m_threadingAnalyzer) {
+        m_threadingAnalyzer->RecordContentionEnd(tid, durationUs);
+    }
+}
+
+void ProfilerCore::RecordThreadMigration(std::thread::id tid,
+                                            int32_t fromCore,
+                                            int32_t toCore) {
+    if (m_threadingAnalyzer) {
+        m_threadingAnalyzer->RecordCoreMigration(tid, fromCore, toCore);
     }
 }
 

@@ -149,6 +149,14 @@ public:
     void RecordAllocation(const std::string& category, const std::string& name, size_t sizeBytes);
     void RecordGCEvent(enum GCGeneration gen, double pauseMs, enum GCTrigger trigger,
                       size_t heapBefore, size_t heapAfter, size_t promoted);
+    
+    // Threading Analysis (NEW)
+    class ThreadingAnalyzer* GetThreadingAnalyzer() { return m_threadingAnalyzer.get(); }
+    void RegisterThread(std::thread::id tid, ThreadRole role, const std::string& name = "");
+    void UnregisterThread(std::thread::id tid);
+    void RecordThreadContentionStart(std::thread::id tid, ContentionType type, const std::string& lockName = "");
+    void RecordThreadContentionEnd(std::thread::id tid, uint64_t durationUs);
+    void RecordThreadMigration(std::thread::id tid, int32_t fromCore, int32_t toCore);
 
     // Configuration management
     class ConfigManager* GetConfigManager() { return &ConfigManager::GetInstance(); }
@@ -202,6 +210,7 @@ private:
     std::unique_ptr<class AutoTuner> m_autoTuner;  // Automated optimization advisor
     std::unique_ptr<class PowerAnalyzer> m_powerAnalyzer;  // Power consumption analysis
     std::unique_ptr<class GCAnalyzer> m_gcAnalyzer;  // GC (garbage collection) analysis
+    std::unique_ptr<class ThreadingAnalyzer> m_threadingAnalyzer;  // Threading analysis (NEW)
     // ConfigManager is a singleton, not owned
     
     struct FunctionStackEntry {
@@ -223,3 +232,4 @@ private:
 #include "AutoTuner.h"
 #include "PowerAnalyzer.h"
 #include "GCAnalyzer.h"
+#include "ThreadingAnalyzer.h"

@@ -13,6 +13,7 @@ namespace ProfilerCore {
     class AutoTuner;
     class PowerAnalyzer;
     class GCAnalyzer;
+    class DiskIOProfiler;
 }
 
 namespace ProfilerCore {
@@ -150,8 +151,19 @@ public:
     void RecordGCEvent(enum GCGeneration gen, double pauseMs, enum GCTrigger trigger,
                       size_t heapBefore, size_t heapAfter, size_t promoted);
     
-    // Threading Analysis (NEW)
+    // Threading Analysis
     class ThreadingAnalyzer* GetThreadingAnalyzer() { return m_threadingAnalyzer.get(); }
+
+    // Disk I/O Analysis
+    class DiskIOProfiler* GetDiskIOProfiler() { return m_diskIOProfiler.get(); }
+    void SetDiskIOProfilerEnabled(bool enabled);
+    bool IsDiskIOProfilerEnabled() const;
+    void RecordDiskOperation(enum DiskIOOpType opType, uint64_t offset,
+                              uint64_t sizeBytes, double durationMs,
+                              const std::string& filePath,
+                              uint32_t queueDepth = 0,
+                              bool isAsync = false,
+                              bool isPageFault = false);
     void RegisterThread(std::thread::id tid, ThreadRole role, const std::string& name = "");
     void UnregisterThread(std::thread::id tid);
     void RecordThreadContentionStart(std::thread::id tid, ContentionType type, const std::string& lockName = "");
@@ -210,7 +222,8 @@ private:
     std::unique_ptr<class AutoTuner> m_autoTuner;  // Automated optimization advisor
     std::unique_ptr<class PowerAnalyzer> m_powerAnalyzer;  // Power consumption analysis
     std::unique_ptr<class GCAnalyzer> m_gcAnalyzer;  // GC (garbage collection) analysis
-    std::unique_ptr<class ThreadingAnalyzer> m_threadingAnalyzer;  // Threading analysis (NEW)
+    std::unique_ptr<class ThreadingAnalyzer> m_threadingAnalyzer;  // Threading analysis
+    std::unique_ptr<class DiskIOProfiler> m_diskIOProfiler;  // Disk I/O analysis
     // ConfigManager is a singleton, not owned
     
     struct FunctionStackEntry {
@@ -233,3 +246,4 @@ private:
 #include "PowerAnalyzer.h"
 #include "GCAnalyzer.h"
 #include "ThreadingAnalyzer.h"
+#include "DiskIOProfiler.h"

@@ -14,6 +14,7 @@
 #include "AutoTuner.h"
 #include "PowerAnalyzer.h"
 #include "GCAnalyzer.h"
+#include "DiskIOProfiler.h"
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -47,7 +48,8 @@ ProfilerCore::ProfilerCore() {
     m_autoTuner = std::make_unique<AutoTuner>();
     m_powerAnalyzer = std::make_unique<PowerAnalyzer>();
     m_gcAnalyzer = std::make_unique<GCAnalyzer>();
-    m_threadingAnalyzer = std::make_unique<ThreadingAnalyzer>();  // NEW
+    m_threadingAnalyzer = std::make_unique<ThreadingAnalyzer>();
+    m_diskIOProfiler = std::make_unique<DiskIOProfiler>();
 
     // Wire alert manager to analyzer output
     m_alertManager->SetOnAlertGenerated([](const Alert& alert) {
@@ -356,6 +358,11 @@ std::string ProfilerCore::ExportToJSON() const {
     // Append frame spike analysis if available
     if (m_frameSpikeAnalyzer) {
         ss << ",\"spikes\":" << m_frameSpikeAnalyzer->ExportToJSON();
+    }
+    
+    // Append disk I/O analysis if available
+    if (m_diskIOProfiler) {
+        ss << ",\"diskIO\":" << m_diskIOProfiler->ExportToJSON();
     }
     
     ss << "}";
@@ -680,6 +687,32 @@ void ProfilerCore::RecordThreadMigration(std::thread::id tid,
                                             int32_t toCore) {
     if (m_threadingAnalyzer) {
         m_threadingAnalyzer->RecordCoreMigration(tid, fromCore, toCore);
+    }}
+
+// ─── Disk I/O Analysis Integration ──────────────────────────────────
+
+void ProfilerCore::SetDiskIOProfilerEnabled(bool enabled) {
+    if (m_diskIOProfiler) {
+        m_diskIOProfiler->SetEnabled(enabled);
+    }
+}
+
+bool ProfilerCore::IsDiskIOProfilerEnabled() const {
+    if (m_diskIOProfiler) {
+        return m_diskIOProfiler->IsEnabled();
+    }
+    return false;
+}
+
+void ProfilerCore::RecordDiskOperation(enum DiskIOOpType opType, uint64_t offset,
+                                          uint64_t sizeBytes, double durationMs,
+                                          const std::string& filePath,
+                                          uint32_t queueDepth,
+                                          bool isAsync,
+                                          bool isPageFault) {
+    if (m_diskIOProfiler) {
+        m_diskIOProfiler->RecordOperation(opType, offset, sizeBytes, durationMs,
+                                            filePath, queueDepth, isAsync, isPageFault);
     }
 }
 

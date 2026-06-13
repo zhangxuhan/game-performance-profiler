@@ -33,6 +33,7 @@ Windows 游戏性能分析工具。
 | **配置管理** | 分层配置（默认/文件/运行时），JSON导入导出，5种预设，变更监听，范围校验 |
 | **抖动分析** | 帧时间抖动模式识别，根因分析（CPU/GPU/IO），优化建议生成 |
 | **帧尖峰分析** | 深度帧尖峰检测，根因分类（GC/加载/渲染/IO等），重复模式识别，优化建议 |
+| **磁盘IO分析** | 磁盘读写延迟追踪、IO队列深度监控、吞吐量分析、按文件统计IO热点、磁盘节流导致的卡顿事件检测、健康评分（0-100）、智能优化建议 |
 | **功耗分析** | CPU/GPU功耗追踪，电池状态监控，能效评分（FPS/W），节电建议 |
 | **GC分析** | 垃圾回收事件追踪，暂停时间分析，内存分配热点检测，GC优化建议 |
 | **线程分析** | 多线程性能分析、锁竞争检测、核心迁移追踪、线程池饥饿检测、优化建议 |
@@ -78,6 +79,7 @@ Windows game performance profiling tool.
 | **Config Management** | Hierarchical config (default/file/runtime), JSON import/export, 5 presets, change listeners, range validation |
 | **Jitter Analysis** | Frame time jitter pattern detection, root cause analysis (CPU/GPU/IO), optimization recommendations |
 | **Frame Spike Analysis** | Deep spike detection, root cause classification (GC/Loading/Render/IO), recurring pattern detection, optimization suggestions |
+| **Disk I/O Analysis** | Disk read/write latency tracking, I/O queue depth monitoring, throughput analysis, per-file I/O hotspot identification, stutter event detection from disk throttling, health scoring (0-100), actionable optimization recommendations |
 | **Power Analysis** | CPU/GPU power tracking, battery status, efficiency score (FPS/W), power-saving recommendations |
 | **GC Analysis** | Garbage collection event tracking, pause time analysis, allocation hotspot detection, GC optimization recommendations |
 | **Threading Analysis** | Multi-thread performance analysis, lock contention detection, core migration tracking, thread pool starvation detection, optimization recommendations |
@@ -123,6 +125,7 @@ Windows用ゲームパフォーマンス解析ツール。
 | **設定管理** | 階層型設定（デフォルト/ファイル/ランタイム）、JSON インポート/エクスポート、5つのプリセット、変更リスナー、範囲検証 |
 | **ジッター分析** | フレームタイムジッターパターン検出、原因分析（CPU/GPU/IO）、最適化推奨 |
 | **フレームスパイク分析** | 詳細スパイク検出、原因分類（GC/読み込み/レンダリング/IO）、繰り返しパターン検出、最適化提案 |
+| **ディスクI/O分析** | ディスク読み取り/書き込みレイテンシ追跡、I/Oキューの深さ監視、スループット解析、ファイル別I/Oホットスポット特定、ディスク調節によるスタッターイベント検出、ヘルススコア（0-100）、最適化推奨 |
 | **電力分析** | CPU/GPU電力追跡、バッテリー状態、効率スコア（FPS/W）、省電力推奨 |
 | **GC分析** | ガーベジコレクションイベント追跡、一時停止時間分析、メモリ配置ホットスポット検出、GC最適化推奨 |
 | **スレッド分析** | マルチスレッド性能分析、ロック競合検出、コア移行追跡、スレッドプール飢餓検出、最適化推奨 |

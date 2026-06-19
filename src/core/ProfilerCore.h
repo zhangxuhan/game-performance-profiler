@@ -170,6 +170,15 @@ public:
     void RecordThreadContentionEnd(std::thread::id tid, uint64_t durationUs);
     void RecordThreadMigration(std::thread::id tid, int32_t fromCore, int32_t toCore);
 
+    // Heatmap Analysis
+    class HeatmapAnalyzer* GetHeatmapAnalyzer() { return m_heatmapAnalyzer.get(); }
+    void SetHeatmapAnalyzerEnabled(bool enabled);
+    bool IsHeatmapAnalyzerEnabled() const;
+    struct HeatmapResult GenerateFPSHeatmap();
+    struct HeatmapResult GenerateMemoryHeatmap();
+    struct HeatmapResult GenerateTemperatureHeatmap();
+    std::string ExportHeatmapToSVG(const struct HeatmapResult& result) const;
+
     // Configuration management
     class ConfigManager* GetConfigManager() { return &ConfigManager::GetInstance(); }
     bool LoadConfigFromFile(const std::string& filepath);
@@ -224,6 +233,7 @@ private:
     std::unique_ptr<class GCAnalyzer> m_gcAnalyzer;  // GC (garbage collection) analysis
     std::unique_ptr<class ThreadingAnalyzer> m_threadingAnalyzer;  // Threading analysis
     std::unique_ptr<class DiskIOProfiler> m_diskIOProfiler;  // Disk I/O analysis
+    std::unique_ptr<class HeatmapAnalyzer> m_heatmapAnalyzer;  // Heatmap visualization analysis
     // ConfigManager is a singleton, not owned
     
     struct FunctionStackEntry {
@@ -247,3 +257,4 @@ private:
 #include "GCAnalyzer.h"
 #include "ThreadingAnalyzer.h"
 #include "DiskIOProfiler.h"
+#include "HeatmapAnalyzer.h"

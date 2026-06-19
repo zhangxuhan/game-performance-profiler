@@ -15,6 +15,7 @@
 #include "PowerAnalyzer.h"
 #include "GCAnalyzer.h"
 #include "DiskIOProfiler.h"
+#include "HeatmapAnalyzer.h"
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -50,6 +51,7 @@ ProfilerCore::ProfilerCore() {
     m_gcAnalyzer = std::make_unique<GCAnalyzer>();
     m_threadingAnalyzer = std::make_unique<ThreadingAnalyzer>();
     m_diskIOProfiler = std::make_unique<DiskIOProfiler>();
+    m_heatmapAnalyzer = std::make_unique<HeatmapAnalyzer>();
 
     // Wire alert manager to analyzer output
     m_alertManager->SetOnAlertGenerated([](const Alert& alert) {
@@ -714,6 +716,49 @@ void ProfilerCore::RecordDiskOperation(enum DiskIOOpType opType, uint64_t offset
         m_diskIOProfiler->RecordOperation(opType, offset, sizeBytes, durationMs,
                                             filePath, queueDepth, isAsync, isPageFault);
     }
+}
+
+// ─── Heatmap Analysis Integration ──────────────────────────────────
+
+void ProfilerCore::SetHeatmapAnalyzerEnabled(bool enabled) {
+    if (m_heatmapAnalyzer) {
+        m_heatmapAnalyzer->SetEnabled(enabled);
+    }
+}
+
+bool ProfilerCore::IsHeatmapAnalyzerEnabled() const {
+    if (m_heatmapAnalyzer) {
+        return m_heatmapAnalyzer->IsEnabled();
+    }
+    return false;
+}
+
+HeatmapResult ProfilerCore::GenerateFPSHeatmap() {
+    if (m_heatmapAnalyzer) {
+        return m_heatmapAnalyzer->GenerateFPSHeatmap();
+    }
+    return HeatmapResult();
+}
+
+HeatmapResult ProfilerCore::GenerateMemoryHeatmap() {
+    if (m_heatmapAnalyzer) {
+        return m_heatmapAnalyzer->GenerateMemoryHeatmap();
+    }
+    return HeatmapResult();
+}
+
+HeatmapResult ProfilerCore::GenerateTemperatureHeatmap() {
+    if (m_heatmapAnalyzer) {
+        return m_heatmapAnalyzer->GenerateTemperatureHeatmap();
+    }
+    return HeatmapResult();
+}
+
+std::string ProfilerCore::ExportHeatmapToSVG(const HeatmapResult& result) const {
+    if (m_heatmapAnalyzer) {
+        return m_heatmapAnalyzer->ExportToSVG(result);
+    }
+    return "";
 }
 
 } // namespace ProfilerCore

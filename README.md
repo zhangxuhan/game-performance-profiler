@@ -39,6 +39,7 @@ Windows 游戏性能分析工具。
 | **线程分析** | 多线程性能分析、锁竞争检测、核心迁移追踪、线程池饥饿检测、优化建议 |
 | **仪表盘API** | 时间序列聚合、趋势分析、性能评分、数据导出（CSV/JSON/PROF）、录制会话管理、异常检测 |
 | **热力图分析** | FPS/内存/温度/帧时间可视化热力图、函数调用热力图、会话对比热力图、SVG导出可视化 |
+| **音频分析** | Voice实例追踪与管理、音频线程CPU剖析（混音/DSP/流式）、内存压力检测、延迟与抖动监控、音频故障/缓冲区欠载检测、DSP链剖析、音频健康评分（0-100）、自动化优化建议 |
 
 ### 数据文件格式
 
@@ -85,6 +86,7 @@ Windows game performance profiling tool.
 | **Threading Analysis** | Multi-thread performance analysis, lock contention detection, core migration tracking, thread pool starvation detection, optimization recommendations |
 | **Dashboard API** | Time-series aggregation, trend analysis, performance scoring, data export (CSV/JSON/PROF), recording session management, anomaly detection |
 | **Heatmap Analysis** | Visual heatmaps for FPS/memory/thermal/frame time, call stack heatmap, comparative session heatmaps, SVG export for visualization |
+| **Audio Analysis** | Voice tracking & management, audio thread CPU profiling (mixer/DSP/streaming), memory pressure detection, latency & jitter monitoring, glitch/buffer underrun detection, DSP chain profiling, audio health scoring (0-100), automated recommendations |
 
 ### Data File Format
 
@@ -131,6 +133,7 @@ Windows用ゲームパフォーマンス解析ツール。
 | **スレッド分析** | マルチスレッド性能分析、ロック競合検出、コア移行追跡、スレッドプール飢餓検出、最適化推奨 |
 | **ダッシュボードAPI** | 時系列アグリゲーション、トレンド分析、パフォーマンススコアリング、データエクスポート（CSV/JSON/PROF）、録画セッション管理、異常検出 |
 | **ヒートマップ分析** | FPS/メモリ/温度/フレームタイムのビジュアルヒートマップ、コールスタックヒートマップ、セッション比較ヒートマップ、SVGエクスポート対応 |
+| **オーディオ分析** | 音声インスタンストラッキング与管理、音声スレッドCPUプロファイリング（ミキサー/DSP/ストリーミング）、メモリ圧力検出、レイテンシ・ジッター監視、グリッチ/バッファアンダーラン検出、DSPチェーンプロファイリング、オーディオ健全性スコア（0-100）、自動最適化提案 |
 
 ### データファイル形式
 

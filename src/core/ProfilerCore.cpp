@@ -52,6 +52,7 @@ ProfilerCore::ProfilerCore() {
     m_threadingAnalyzer = std::make_unique<ThreadingAnalyzer>();
     m_diskIOProfiler = std::make_unique<DiskIOProfiler>();
     m_heatmapAnalyzer = std::make_unique<HeatmapAnalyzer>();
+    m_audioProfiler = std::make_unique<AudioProfiler>();
 
     // Wire alert manager to analyzer output
     m_alertManager->SetOnAlertGenerated([](const Alert& alert) {
@@ -759,6 +760,28 @@ std::string ProfilerCore::ExportHeatmapToSVG(const HeatmapResult& result) const 
         return m_heatmapAnalyzer->ExportToSVG(result);
     }
     return "";
+}
+
+// ─── Audio Profiler ──────────────────────────────────────────────────────────
+
+void ProfilerCore::SetAudioProfilerEnabled(bool enabled) {
+    if (m_audioProfiler) {
+        m_audioProfiler->SetEnabled(enabled);
+    }
+}
+
+bool ProfilerCore::IsAudioProfilerEnabled() const {
+    if (m_audioProfiler) {
+        return m_audioProfiler->IsEnabled();
+    }
+    return false;
+}
+
+AudioReport ProfilerCore::GetAudioReport() const {
+    if (m_audioProfiler) {
+        return m_audioProfiler->GenerateReport();
+    }
+    return AudioReport{};
 }
 
 } // namespace ProfilerCore

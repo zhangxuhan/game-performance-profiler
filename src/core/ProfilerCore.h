@@ -14,6 +14,7 @@ namespace ProfilerCore {
     class PowerAnalyzer;
     class GCAnalyzer;
     class DiskIOProfiler;
+    class AudioProfiler;
 }
 
 namespace ProfilerCore {
@@ -170,6 +171,12 @@ public:
     void RecordThreadContentionEnd(std::thread::id tid, uint64_t durationUs);
     void RecordThreadMigration(std::thread::id tid, int32_t fromCore, int32_t toCore);
 
+    // Audio Analysis
+    class AudioProfiler* GetAudioProfiler() { return m_audioProfiler.get(); }
+    void SetAudioProfilerEnabled(bool enabled);
+    bool IsAudioProfilerEnabled() const;
+    struct AudioReport GetAudioReport() const;
+
     // Heatmap Analysis
     class HeatmapAnalyzer* GetHeatmapAnalyzer() { return m_heatmapAnalyzer.get(); }
     void SetHeatmapAnalyzerEnabled(bool enabled);
@@ -234,6 +241,7 @@ private:
     std::unique_ptr<class ThreadingAnalyzer> m_threadingAnalyzer;  // Threading analysis
     std::unique_ptr<class DiskIOProfiler> m_diskIOProfiler;  // Disk I/O analysis
     std::unique_ptr<class HeatmapAnalyzer> m_heatmapAnalyzer;  // Heatmap visualization analysis
+    std::unique_ptr<class AudioProfiler> m_audioProfiler;  // Audio performance analysis
     // ConfigManager is a singleton, not owned
     
     struct FunctionStackEntry {
@@ -258,3 +266,4 @@ private:
 #include "ThreadingAnalyzer.h"
 #include "DiskIOProfiler.h"
 #include "HeatmapAnalyzer.h"
+#include "AudioProfiler.h"
